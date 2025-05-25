@@ -1,0 +1,167 @@
+"use client";
+import { Trash, Edit, Boxes, ChevronRight, ChevronLeft } from "lucide-react";
+import { useEffect, useLayoutEffect, useState } from "react";
+import EditBoxSheet from "./sheet/EditBoxSheet";
+import { useProduct } from "@/store/productStore";
+import EditProductSheet from "./sheet/EditProductSheet";
+import { Button } from "./ui/button";
+
+const ListeDesProduits = () => {
+  const [open, setOpen] = useState(false);
+  const [productId, setProductId] = useState(null);
+  const {
+    productState: { products, loadingProduct, error, pagination },
+    fetchAllProducts,
+    nextPage,
+  } = useProduct();
+
+
+  useEffect(() => {
+    fetchAllProducts(pagination.currentPage, pagination.pageSize);
+  }, [fetchAllProducts, pagination.currentPage, pagination.pageSize]);
+
+  const handlePageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= pagination.totalPages) {
+      fetchAllProducts(newPage, pagination.pageSize);
+    }
+  };
+
+    // Handle product addition (refresh list after adding)
+  const handleProductAdded = () => {
+    fetchAllProducts(pagination.currentPage, pagination.pageSize);
+    setSheetOpen(false);
+  };
+
+  const renderPageNumbers = () => {
+    const pageNumbers = [];
+    const maxPagesToShow = 5;
+    const startPage = Math.max(1, pagination.currentPage - Math.floor(maxPagesToShow / 2));
+    const endPage = Math.min(pagination.totalPages, startPage + maxPagesToShow - 1);
+
+    for (let i = startPage; i <= endPage; i++) {
+      pageNumbers.push(
+        <Button
+          key={i}
+          variant={i === pagination.currentPage ? "default" : "outline"}
+          onClick={() => handlePageChange(i)}
+          className="mx-1"
+        >
+          {i}
+        </Button>
+      );
+    }
+    return pageNumbers;
+  };
+
+  return (
+    <div className="overflow-x-auto">
+      <EditProductSheet open={open} setOpen={setOpen} productId={productId} />
+      <table className="min-w-full divide-y divide-gray-200">
+        <thead className="bg-gray-50">
+          <tr>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              #ID
+            </th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Designation
+            </th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Genre
+            </th>
+            <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+              En stock
+            </th>
+            <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Unite en stock
+            </th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Prix
+            </th>
+            <th className="px-6 py-3 text-center  text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Capacity de crate
+            </th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Crate
+            </th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Actions
+            </th>
+          </tr>
+        </thead>
+        <tbody className="bg-white divide-y divide-gray-200">
+          {products?.map((product) => {
+            return (
+              <tr
+                key={product.id}
+                className="text-sm text-gray-500 border-b hover:text-black ease-in delay-75 transition-all"
+              >
+                <td className="px-6 py-4 whitespace-nowrap">#{product?.id}</td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  {product.designation}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">{product.genre}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-center">
+                  {product.stock}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-center">
+                  {product.uniteInStock}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-center">
+                  {product.priceUnite}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-center">
+                  {product.capacityByBox}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  {product.BoxAssociation.designation}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  {/* <button>
+                    <Trash className="w-4 h-4 cursor-pointer" />
+                  </button> */}
+
+                  <button onClick={() => {setOpen(true); setProductId(product.id)}}>
+                    <Edit className="w-4 h-4 cursor-pointer" />
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {/* Pagination Controls */}
+      {pagination.totalPages > 1 && (
+        <div className="flex justify-center items-center mt-4 gap-2">
+          <Button
+            variant="outline"
+            onClick={() => handlePageChange(pagination.currentPage - 1)}
+            disabled={pagination.currentPage === 1}
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Previous
+          </Button>
+
+          {renderPageNumbers()}
+
+          <Button
+            variant="outline"
+            onClick={nextPage}
+            disabled={pagination.currentPage === pagination.totalPages}
+          >
+            Next
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+      {/* Pagination Info */}
+      {pagination.totalItems > 0 && (
+        <p className="text-center mt-2 text-sm text-gray-500">
+          Showing {products.length} of {pagination.totalItems} products (Page{" "}
+          {pagination.currentPage} of {pagination.totalPages})
+        </p>
+      )}
+    </div>
+  );
+};
+
+export default ListeDesProduits;
