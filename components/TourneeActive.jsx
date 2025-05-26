@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { axiosInstance } from "@/utils/axiosInstance";
-import PrintInvoice from "./PrintInvoice"; // Adjust the path based on your project structure
+import PrintInvoice from "./PrintInvoice";
+import FinishTripForm from "./FinishTripForm";
 
 const TourneeActive = () => {
   const {
@@ -16,6 +17,7 @@ const TourneeActive = () => {
   const [selectedTripId, setSelectedTripId] = useState(null);
   const [tripDetails, setTripDetails] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
   const [products, setProducts] = useState([]);
   const [boxes, setBoxes] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -39,35 +41,22 @@ const TourneeActive = () => {
     fetchData();
   }, []);
 
-  if (loadingTrip)
-    return <p className="text-center text-gray-400">Chargement...</p>;
+  if (loadingTrip) return <p className="text-center text-gray-400">Chargement...</p>;
   if (error) return <p className="text-center text-red-500">{error}</p>;
 
-  console.log("activeTrips in TourneeActive:", activeTrips);
   if (!activeTrips || activeTrips.length === 0)
-    return (
-      <p className="text-center text-gray-400">
-        Il n'y a pas de tournées actives.
-      </p>
-    );
+    return <p className="text-center text-gray-400">Il n'y a pas de tournées actives.</p>;
 
   const handleShowDetails = async (tripId) => {
     try {
-      console.log("Attempting to fetch details for tripId:", tripId);
       const trip = await fetchTripById(tripId);
       setSelectedTripId(tripId);
       setTripDetails(trip);
       setIsModalOpen(true);
-      console.log("Trip details:", trip);
     } catch (error) {
       console.error("Error fetching trip details:", error);
-      if (error.response) {
-        console.error("Response data:", error.response.data);
-        console.error("Response status:", error.response.status);
-      }
-      const errorMessage = error.message || "Erreur lors de la récupération des détails de la tournée.";
-      toast.error(errorMessage);
-      if (errorMessage.includes("non trouvée")) {
+      toast.error("Erreur lors de la récupération des détails de la tournée.");
+      if (error.message.includes("non trouvée")) {
         await fetchActiveTrips();
         toast.info("La liste des tournées actives a été mise à jour.");
         setTripDetails(null);
@@ -75,15 +64,18 @@ const TourneeActive = () => {
     }
   };
 
-  const handleFinishTrip = async (tripId) => {
+  const handleFinishTrip = async (formData) => {
     try {
-      const formData = { tripProducts: [], tripBoxes: [], receivedAmount: 0 };
-      await finishTrip(tripId, formData);
-      console.log(`Trip ${tripId} finished`);
+      console.log("Calling finishTrip with tripId:", selectedTripId, "and data:", formData); // Debug log
+      await finishTrip(selectedTripId, formData);
       setTripDetails(null);
-      setIsModalOpen(false); // Close modal after finishing
+      setIsFinishModalOpen(false);
+      setIsModalOpen(false);
+      await fetchActiveTrips();
+      toast.success("Tournée terminée avec succès !");
     } catch (error) {
       console.error("Error finishing trip:", error);
+      toast.error("Erreur lors de la finalisation de la tournée.");
     }
   };
 
@@ -93,7 +85,12 @@ const TourneeActive = () => {
     setSelectedTripId(null);
   };
 
-  // Map tripDetails to match PrintInvoice expected formData structure
+  const openFinishModal = (tripId) => {
+    setSelectedTripId(tripId);
+    handleShowDetails(tripId);
+    setIsFinishModalOpen(true);
+  };
+
   const mapTripDetailsToFormData = (trip) => {
     if (!trip) return null;
     return {
@@ -126,41 +123,31 @@ const TourneeActive = () => {
             className="flex flex-col w-75 text-black p-4 rounded-lg shadow-lg hover:shadow-xl transition-shadow"
           >
             <div className="flex justify-between items-center border-b border-gray-700 pb-2 mb-2">
-              <h4 className="text-lg font-medium text-black">
-                Tournée #{trip.id}
-              </h4>
+              <h4 className="text-lg font-medium text-black">Tournée #{trip.id}</h4>
               <span className="text-sm text-black-400">
                 {new Date(trip.date).toLocaleDateString()}
               </span>
             </div>
             <div className="flex flex-col gap-1 text-sm">
               <div className="flex justify-between">
-                <span className="">Camion:</span>
-                <span className="text-black">
-                  {trip.TruckAssociation?.matricule || "N/A"}
-                </span>
+                <span>Camion:</span>
+                <span className="text-black">{trip.TruckAssociation?.matricule || "N/A"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-black">Conducteur:</span>
-                <span className="">
-                  {trip.DriverAssociation?.name || "N/A"}
-                </span>
+                <span>{trip.DriverAssociation?.name || "N/A"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-black">Vendeur:</span>
-                <span className="">
-                  {trip.SellerAssociation?.name || "N/A"}
-                </span>
+                <span>{trip.SellerAssociation?.name || "N/A"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-black">Assistant:</span>
-                <span className="">
-                  {trip.AssistantAssociation?.name || "N/A"}
-                </span>
+                <span>{trip.AssistantAssociation?.name || "N/A"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-black">Zone:</span>
-                <span className="">{trip.zone}</span>
+                <span>{trip.zone}</span>
               </div>
             </div>
             <div className="flex gap-2 mt-4">
@@ -171,7 +158,7 @@ const TourneeActive = () => {
                 Afficher Détails
               </Button>
               <Button
-                onClick={() => handleFinishTrip(trip.id)}
+                onClick={() => openFinishModal(trip.id)}
                 className="flex-1 bg-blue-700 hover:bg-blue-800 text-white text-sm py-1.5 rounded-md"
               >
                 Terminer
@@ -181,17 +168,14 @@ const TourneeActive = () => {
         ))}
       </div>
 
-      {isModalOpen && tripDetails && (
+      {isModalOpen && tripDetails && !isFinishModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-4 rounded-lg shadow-lg w-[90%] max-w-2xl max-h-[80vh] overflow-y-auto">
             <div className="flex justify-between items-center border-b border-gray-700 pb-2 mb-2">
               <h5 className="text-lg font-medium text-black">
                 Détails de la Tournée #{selectedTripId}
               </h5>
-              <button
-                onClick={closeModal}
-                className="text-black hover:text-red-500 text-xl font-bold"
-              >
+              <button onClick={closeModal} className="text-black hover:text-red-500 text-xl font-bold">
                 ×
               </button>
             </div>
@@ -302,7 +286,7 @@ const TourneeActive = () => {
                 </Button>
                 {tripDetails.isActive && (
                   <Button
-                    onClick={() => handleFinishTrip(selectedTripId)}
+                    onClick={() => setIsFinishModalOpen(true)}
                     className="text-sm py-1.5 rounded-md bg-blue-700 hover:bg-blue-800 text-white"
                   >
                     Terminer
@@ -316,6 +300,31 @@ const TourneeActive = () => {
                 />
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {isFinishModalOpen && tripDetails && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-4 rounded-lg shadow-lg w-[90%] max-w-2xl max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b border-gray-700 pb-2 mb-2">
+              <h5 className="text-lg font-medium text-black">
+                Terminer la Tournée #{selectedTripId}
+              </h5>
+              <button
+                onClick={() => setIsFinishModalOpen(false)}
+                className="text-black hover:text-red-500 text-xl font-bold"
+              >
+                ×
+              </button>
+            </div>
+            <FinishTripForm
+              tripDetails={tripDetails}
+              onSubmit={handleFinishTrip}
+              onCancel={() => setIsFinishModalOpen(false)}
+              products={products}
+              boxes={boxes}
+            />
           </div>
         </div>
       )}

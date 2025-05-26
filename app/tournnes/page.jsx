@@ -5,6 +5,7 @@ import TourneeActive from "@/components/TourneeActive";
 import ListeDesTournees from "@/components/ListeDesTournees";
 import StartTripForm from "@/components/StartTripForm";
 import { Button } from "@/components/ui/button";
+import TourneeHistory from "@/components/TourneeHistory";
 
 const TripPage = () => {
   const { tripState: { activeTrips }, fetchAllTrips, fetchActiveTrips, startTrip } = useTrip();
@@ -12,8 +13,8 @@ const TripPage = () => {
 
   useEffect(() => {
     fetchAllTrips();
-    fetchActiveTrips(); // Changed from fetchActiveTrip
-  }, [fetchAllTrips, fetchActiveTrips]); // Updated dependency
+    fetchActiveTrips();
+  }, [fetchAllTrips, fetchActiveTrips]);
 
   const handleStartNewTrip = () => {
     setIsFormOpen(true);
@@ -23,7 +24,8 @@ const TripPage = () => {
     try {
       await startTrip(formData);
       setIsFormOpen(false);
-      await fetchActiveTrips(); // Changed from fetchActiveTrip
+      await fetchActiveTrips();
+      await fetchAllTrips();
     } catch (error) {
       console.error("Error starting trip:", error);
     }
@@ -41,6 +43,7 @@ const TripPage = () => {
             </Button>
           </div>
           <TourneeActive />
+          {/* <TourneeHistory /> */}
         </section>
         <section>
           <ListeDesTournees />

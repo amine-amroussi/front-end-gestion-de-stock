@@ -16,44 +16,44 @@ export const useTrip = create((set, get) => ({
     },
   },
   fetchAllTrips: async (page = 1, limit = 10) => {
-    try {
+  try {
+    set((state) => ({
+      tripState: { ...state.tripState, loadingTrip: true, error: null },
+    }));
+
+    const response = await axiosInstance.get(`/trip`, {
+      params: { page, limit },
+    });
+    console.log("fetchAllTrips response:", response.data);
+
+    if (response.status === 200) {
+      const { trips, totalItems, totalPages, currentPage } = response.data;
       set((state) => ({
-        tripState: { ...state.tripState, loadingTrip: true, error: null },
-      }));
-
-      const response = await axiosInstance.get(`/trip`, {
-        params: { page, limit },
-      });
-      console.log("fetchAllTrips response:", response.data);
-
-      if (response.status === 200) {
-        const { trips, totalItems, totalPages, currentPage } = response.data;
-        set((state) => ({
-          tripState: {
-            ...state.tripState,
-            trips,
-            pagination: {
-              totalItems,
-              totalPages,
-              currentPage,
-              pageSize: limit,
-            },
+        tripState: {
+          ...state.tripState,
+          trips,
+          pagination: {
+            totalItems,
+            totalPages,
+            currentPage,
+            pageSize: limit,
           },
-        }));
-      }
-    } catch (error) {
-      const errorMessage = error.response?.data?.message || "Erreur lors de la récupération des tournées.";
-      console.error("fetchAllTrips error:", error.response?.data || error);
-      set((state) => ({
-        tripState: { ...state.tripState, loadingTrip: false, error: errorMessage },
-      }));
-      toast.error(errorMessage);
-    } finally {
-      set((state) => ({
-        tripState: { ...state.tripState, loadingTrip: false },
+        },
       }));
     }
-  },
+  } catch (error) {
+    const errorMessage = error.response?.data?.message || "Erreur lors de la récupération des tournées.";
+    console.error("fetchAllTrips error:", error.response?.data || error);
+    set((state) => ({
+      tripState: { ...state.tripState, loadingTrip: false, error: errorMessage },
+    }));
+    toast.error(errorMessage);
+  } finally {
+    set((state) => ({
+      tripState: { ...state.tripState, loadingTrip: false },
+    }));
+  }
+},
   fetchActiveTrips: async () => {
     try {
       set((state) => ({
@@ -142,37 +142,44 @@ export const useTrip = create((set, get) => ({
       }));
     }
   },
-  finishTrip: async (tripId, tripData) => {
-    try {
-      set((state) => ({
-        tripState: { ...state.tripState, loadingTrip: true, error: null },
-      }));
+finishTrip: async (tripId, tripData) => {
+  try {
+    set((state) => ({
+      tripState: { ...state.tripState, loadingTrip: true, error: null },
+    }));
+    console.log("Sending finishTrip request for tripId:", tripId, "with data:", tripData);
 
-      const response = await axiosInstance.post(`/trip/finish/${tripId}`, tripData);
-      console.log("finishTrip response:", response.data);
+    const response = await axiosInstance.post(`/trip/finish/${tripId}`, tripData);
+    console.log("finishTrip response:", response.data);
 
-      if (response.status === 200) {
-        set((state) => ({
-          tripState: {
-            ...state.tripState,
-            activeTrips: state.tripState.activeTrips.filter(trip => trip.id !== tripId),
-          },
-        }));
-        await get().fetchAllTrips(get().tripState.pagination.currentPage, get().tripState.pagination.pageSize);
-      }
-    } catch (error) {
-      const errorMessage = error.response?.data?.message || "Erreur lors de la finalisation de la tournée.";
-      console.error("finishTrip error:", error.response?.data || error);
+    if (response.status === 200) {
       set((state) => ({
-        tripState: { ...state.tripState, loadingTrip: false, error: errorMessage },
+        tripState: {
+          ...state.tripState,
+          activeTrips: state.tripState.activeTrips.filter(trip => trip.id !== tripId),
+        },
       }));
-      toast.error(errorMessage);
-    } finally {
-      set((state) => ({
-        tripState: { ...state.tripState, loadingTrip: false },
-      }));
+      await get().fetchAllTrips(get().tripState.pagination.currentPage, get().tripState.pagination.pageSize);
     }
-  },
+  } catch (error) {
+    const errorMessage = error.response?.data?.message || "Erreur lors de la finalisation de la tournée.";
+    console.error("finishTrip error:", {
+      message: errorMessage,
+      status: error.response?.status,
+      data: error.response?.data,
+      request: tripData,
+      stack: error.stack,
+    });
+    set((state) => ({
+      tripState: { ...state.tripState, loadingTrip: false, error: errorMessage },
+    }));
+    toast.error(errorMessage);
+  } finally {
+    set((state) => ({
+      tripState: { ...state.tripState, loadingTrip: false },
+    }));
+  }
+},
   generateInvoice: async (tripId, type) => {
     try {
       set((state) => ({
