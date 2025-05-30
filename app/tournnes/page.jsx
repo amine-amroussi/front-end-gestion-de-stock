@@ -1,61 +1,36 @@
 "use client";
-import { useEffect, useState } from "react";
-import { useTrip } from "@/store/tripStore";
-import TourneeActive from "@/components/TourneeActive";
-import ListeDesTournees from "@/components/ListeDesTournees";
-import StartTripForm from "@/components/StartTripForm";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import StartTripForm from "@/components/StartTripForm";
+import TourneeActive from "@/components/TourneeActive";
 import TourneeHistory from "@/components/TourneeHistory";
+import ListeDesTournees from "@/components/ListeDesTournees";
+import { useTrip } from "@/store/tripStore";
 
-const TripPage = () => {
-  const { tripState: { activeTrips }, fetchAllTrips, fetchActiveTrips, startTrip } = useTrip();
-  const [isFormOpen, setIsFormOpen] = useState(false);
-
-  useEffect(() => {
-    fetchAllTrips();
-    fetchActiveTrips();
-  }, [fetchAllTrips, fetchActiveTrips]);
-
-  const handleStartNewTrip = () => {
-    setIsFormOpen(true);
-  };
-
-  const handleTripStarted = async (formData) => {
-    try {
-      await startTrip(formData);
-      setIsFormOpen(false);
-      await fetchActiveTrips();
-      await fetchAllTrips();
-    } catch (error) {
-      console.error("Error starting trip:", error);
-    }
-  };
+export default function Home() {
+  const [isStartOpen, setIsStartOpen] = useState(false);
+  const { startTrip } = useTrip();
 
   return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-3xl font-bold mb-6">Tournées</h1>
-      <div className="space-y-8">
-        <section>
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold">Tournées Actives</h2>
-            <Button onClick={handleStartNewTrip}>
-              Démarrer une Nouvelle Tournée
-            </Button>
-          </div>
-          <TourneeActive />
-          {/* <TourneeHistory /> */}
-        </section>
-        <section>
-          <ListeDesTournees />
-        </section>
-      </div>
+    <div className="p-4">
+      <h1 className="text-3xl font-bold mb-6">Gestion des Tournées</h1>
+      <Button onClick={() => setIsStartOpen(true)} className="mb-4">
+        Démarrer une Nouvelle Tournée
+      </Button>
       <StartTripForm
-        open={isFormOpen}
-        onOpenChange={setIsFormOpen}
-        onTripStarted={handleTripStarted}
+        open={isStartOpen}
+        onOpenChange={setIsStartOpen}
+        onTripStarted={startTrip}
       />
+      <div className="mb-6">
+        <TourneeActive />
+      </div>
+      {/* <div className="mb-6">
+        <TourneeHistory />
+      </div> */}
+      <div className="mb-6">
+        <ListeDesTournees />
+      </div>
     </div>
   );
-};
-
-export default TripPage;
+}

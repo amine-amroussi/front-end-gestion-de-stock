@@ -10,7 +10,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { links } from "@/utils/constants";
+import { links, otherUrls } from "@/utils/constants";
 import Link from "next/link";
 
 export function AppSidebar() {
@@ -22,6 +22,16 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {links.map((item) => (
+                <SidebarMenuItem key={item.name}>
+                  <SidebarMenuButton>
+                    <Link href={item.url} className="w-full flex items-center gap-2 text-sm text-black">
+                      {item.icon}{item.name}
+                    </Link>
+                  </SidebarMenuButton>  
+                </SidebarMenuItem>
+              ))}
+              <hr />
+              {otherUrls.map((item) => (
                 <SidebarMenuItem key={item.name}>
                   <SidebarMenuButton>
                     <Link href={item.url} className="w-full flex items-center gap-2 text-sm text-black">

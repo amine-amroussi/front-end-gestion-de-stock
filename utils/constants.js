@@ -9,6 +9,8 @@ import {
   TicketCheck,
   MilkOff,
   ArrowDownUp,
+  Banknote,
+  BookCopy,
 } from "lucide-react";
 
 export const links = [
@@ -58,3 +60,8 @@ export const links = [
     icon: <ArrowDownUp  className="w-4 h-4"/>,
   },
 ];
+
+export const otherUrls = [
+  {name : "Paye Employees", url : "/paye-employees", icon : <Banknote className="w-4 h-4" />},
+  {name : "Les Rapports", url : "/rapportes", icon : <BookCopy className="w-4 h-4" />},
+]

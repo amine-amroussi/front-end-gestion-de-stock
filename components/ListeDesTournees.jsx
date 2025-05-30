@@ -3,8 +3,6 @@ import { useEffect, useState } from "react";
 import { useTrip } from "@/store/tripStore";
 import { Button } from "@/components/ui/button";
 import PrintAfternoonInvoice from "./PrintAfternoonInvoice";
-import { axiosInstance } from "@/utils/axiosInstance";
-import { toast } from "sonner";
 
 const ListeDesTournees = () => {
   const { tripState: { trips, loadingTrip, error, pagination }, fetchAllTrips, fetchTripById, nextPage } = useTrip();
@@ -23,17 +21,61 @@ const ListeDesTournees = () => {
         console.error("Invalid trip ID:", tripId);
         return;
       }
+      console.log(`Fetching trip with ID: ${parsedTripId}`);
       const trip = await fetchTripById(parsedTripId);
+      console.log("Fetched trip data:", JSON.stringify(trip, null, 2));
       setSelectedTrip(trip);
       setIsModalOpen(true);
 
       if (!trip.isActive) {
-        const response = await axiosInstance.get(`/trip/invoice/${parsedTripId}?type=afternoon`);
-        setInvoiceData(response.data.invoice);
+        setInvoiceData({
+          tripId: trip.id,
+          truck: trip.TruckAssociation?.matricule,
+          driver: trip.DriverAssociation?.name,
+          seller: trip.SellerAssociation?.name,
+          date: trip.date,
+          zone: trip.zone,
+          products: trip.TripProducts.map(p => ({
+            designation: p.ProductAssociation?.designation,
+            qttOut: p.qttOut,
+            qttOutUnite: p.qttOutUnite,
+            qttReutour: p.qttReutour,
+            qttReutourUnite: p.qttReutourUnite,
+            qttVendu: p.qttVendu,
+            priceUnite: p.ProductAssociation?.priceUnite,
+            totalRevenue: p.qttVendu * (p.ProductAssociation?.priceUnite || 0),
+          })),
+          boxes: trip.TripBoxes.map(b => ({
+            designation: b.BoxAssociation?.designation,
+            qttOut: b.qttOut,
+            qttIn: b.qttIn,
+          })),
+          wastes: trip.TripWastes.map(w => ({
+            product: w.WasteAssociation?.ProductAssociation?.designation || w.product || "Inconnu",
+            type: w.type,
+            qtt: w.qtt,
+          })) || [],
+          charges: trip.TripCharges.map(c => ({
+            type: c.ChargeAssociation?.type || "N/A",
+            amount: c.amount,
+          })) || [],
+          totals: {
+            waitedAmount: trip.waitedAmount,
+            receivedAmount: trip.receivedAmount,
+            benefit: trip.benefit,
+            deff: trip.deff,
+            totalCharges: trip.totalCharges,
+            totalWastes: trip.totalWastes,
+          },
+        });
       }
     } catch (error) {
-      console.error("Error fetching trip or invoice:", error);
-      toast.error("Erreur lors de la récupération des détails de la tournée ou de la facture.");
+      console.error("Error fetching trip:", {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+      });
+      toast.error("Erreur lors de la récupération des détails de la tournée: " + error.message);
     }
   };
 
@@ -43,40 +85,46 @@ const ListeDesTournees = () => {
     setInvoiceData(null);
   };
 
-  if (loadingTrip) return <p>Chargement...</p>;
-  if (error) return <p className="text-red-500">{error}</p>;
+  if (loadingTrip) return <p className="text-center text-gray-600">Chargement...</p>;
+  if (error) return <p className="text-center text-red-500">{error}</p>;
 
   return (
-    <div>
-      <h2 className="text-xl font-semibold mb-4">Liste des Tournées</h2>
+    <div className="p-4">
+      <h2 className="text-2xl font-bold text-gray-800 mb-6">Liste des Tournées</h2>
       {trips.length === 0 ? (
-        <p>Aucune tournée disponible.</p>
+        <p className="text-center text-gray-500">Aucune tournée disponible.</p>
       ) : (
         <>
-          <ul className="space-y-2">
+          <ul className="space-y-4">
             {trips.map((trip) => (
               <li
                 key={trip.id}
-                className="border p-2 rounded cursor-pointer hover:bg-gray-100"
+                className="border border-gray-200 p-4 rounded-lg shadow-sm cursor-pointer hover:bg-gray-50 transition-colors"
                 onClick={() => handleTripClick(trip.id)}
               >
-                <p>ID: {trip.id}</p>
-                <p>Camion: {trip.TruckAssociation?.matricule || "N/A"}</p>
-                <p>Date: {new Date(trip.date).toLocaleDateString()}</p>
-                <p>Zone: {trip.zone}</p>
-                <p>Statut: {trip.isActive ? "Active" : "Terminée"}</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <p className="text-sm font-medium text-gray-700">ID: {trip.id}</p>
+                    <p className="text-sm text-gray-600">Camion: {trip.TruckAssociation?.matricule || "N/A"}</p>
+                    <p className="text-sm text-gray-600">Zone: {trip.zone}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Date: {new Date(trip.date).toLocaleDateString()}</p>
+                    <p className="text-sm text-gray-600">Statut: {trip.isActive ? "Active" : "Terminée"}</p>
+                  </div>
+                </div>
               </li>
             ))}
           </ul>
-          <div className="mt-4">
+          <div className="mt-6 flex justify-between items-center">
             <button
               onClick={nextPage}
               disabled={pagination.currentPage >= pagination.totalPages}
-              className="px-4 py-2 bg-blue-500 text-white rounded disabled:bg-gray-300"
+              className="px-4 py-2 bg-blue-500 text-white rounded-md disabled:bg-gray-300 hover:bg-blue-600 transition-colors"
             >
               Page Suivante
             </button>
-            <p>
+            <p className="text-sm text-gray-600">
               Page {pagination.currentPage} sur {pagination.totalPages} (Total: {pagination.totalItems} tournées)
             </p>
           </div>
@@ -85,185 +133,223 @@ const ListeDesTournees = () => {
 
       {isModalOpen && selectedTrip && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-4 rounded-lg shadow-lg w-[90%] max-w-2xl max-h-[80vh] overflow-y-auto">
-            <div className="flex justify-between items-center border-b border-gray-700 pb-2 mb-2">
-              <h5 className="text-lg font-medium text-black">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b border-gray-200 pb-3 mb-4">
+              <h5 className="text-xl font-semibold text-gray-800">
                 Détails de la Tournée #{selectedTrip.id}
               </h5>
               <button
                 onClick={closeModal}
-                className="text-black hover:text-red-500 text-xl font-bold"
+                className="text-gray-500 hover:text-red-500 text-2xl font-bold"
               >
                 ×
               </button>
             </div>
-            <div className="flex flex-col gap-1 text-sm">
-              <div className="flex justify-between">
-                <span className="text-black">Camion:</span>
-                <span>{selectedTrip.TruckAssociation?.matricule || "N/A"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-black">Conducteur:</span>
-                <span>{selectedTrip.DriverAssociation?.name || "N/A"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-black">Vendeur:</span>
-                <span>{selectedTrip.SellerAssociation?.name || "N/A"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-black">Assistant:</span>
-                <span>{selectedTrip.AssistantAssociation?.name || "N/A"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-black">Zone:</span>
-                <span>{selectedTrip.zone}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-black">Date:</span>
-                <span>{new Date(selectedTrip.date).toLocaleDateString()}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-black">Statut:</span>
-                <span>{selectedTrip.isActive ? "Active" : "Terminée"}</span>
-              </div>
-              {selectedTrip.TripProducts && selectedTrip.TripProducts.length > 0 ? (
-                <div className="mt-2">
-                  <h6 className="text-md font-medium text-black">Produits:</h6>
-                  <table className="w-full text-sm border-collapse">
-                    <thead>
-                      <tr className="border-b">
-                        <th className="text-left p-1">Désignation</th>
-                        <th className="text-left p-1">Qté Sortie (Caisses)</th>
-                        <th className="text-left p-1">Qté Sortie (Unités)</th>
-                        <th className="text-left p-1">Qté Retour (Caisses)</th>
-                        <th className="text-left p-1">Qté Retour (Unités)</th>
-                        <th className="text-left p-1">Qté Vendue</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedTrip.TripProducts.map((product, index) => {
-                        const capacityByBox = product.ProductAssociation?.capacityByBox || 0;
-                        const totalUnitsOut = product.qttOut * capacityByBox + product.qttOutUnite;
-                        const totalUnitsRetour = (product.qttReutour || 0) * capacityByBox + (product.qttReutourUnite || 0);
-                        return (
-                          <tr key={index} className="border-b">
-                            <td className="p-1">{product.ProductAssociation.designation}</td>
-                            <td className="p-1">{product.qttOut}</td>
-                            <td className="p-1">{product.qttOutUnite}</td>
-                            <td className="p-1">{product.qttReutour || 0}</td>
-                            <td className="p-1">{product.qttReutourUnite || 0}</td>
-                            <td className="p-1">{product.qttVendu || 0}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+            <div className="space-y-4 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-gray-700 font-medium">Camion:</p>
+                  <p className="text-gray-600">{selectedTrip.TruckAssociation?.matricule || "N/A"}</p>
                 </div>
-              ) : (
-                <div className="mt-2 text-sm text-gray-500">Aucun produit enregistré.</div>
-              )}
-              {selectedTrip.TripBoxes && selectedTrip.TripBoxes.length > 0 ? (
-                <div className="mt-2">
-                  <h6 className="text-md font-medium text-black">Boîtes:</h6>
-                  <table className="w-full text-sm border-collapse">
-                    <thead>
-                      <tr className="border-b">
-                        <th className="text-left p-1">Désignation</th>
-                        <th className="text-left p-1">Qté Sortie</th>
-                        <th className="text-left p-1">Qté Entrée</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedTrip.TripBoxes.map((box, index) => (
-                        <tr key={index} className="border-b">
-                          <td className="p-1">{box.BoxAssociation.designation}</td>
-                          <td className="p-1">{box.qttOut}</td>
-                          <td className="p-1">{box.qttIn || 0}</td>
+                <div>
+                  <p className="text-gray-700 font-medium">Conducteur:</p>
+                  <p className="text-gray-600">{selectedTrip.DriverAssociation?.name || "N/A"}</p>
+                </div>
+                <div>
+                  <p className="text-gray-700 font-medium">Vendeur:</p>
+                  <p className="text-gray-600">{selectedTrip.SellerAssociation?.name || "N/A"}</p>
+                </div>
+                <div>
+                  <p className="text-gray-700 font-medium">Assistant:</p>
+                  <p className="text-gray-600">{selectedTrip.AssistantAssociation?.name || "N/A"}</p>
+                </div>
+                <div>
+                  <p className="text-gray-700 font-medium">Zone:</p>
+                  <p className="text-gray-600">{selectedTrip.zone}</p>
+                </div>
+                <div>
+                  <p className="text-gray-700 font-medium">Date:</p>
+                  <p className="text-gray-600">{new Date(selectedTrip.date).toLocaleDateString()}</p>
+                </div>
+                <div>
+                  <p className="text-gray-700 font-medium">Statut:</p>
+                  <p className="text-gray-600">{selectedTrip.isActive ? "Active" : "Terminée"}</p>
+                </div>
+              </div>
+
+              {/* Products Table */}
+              {selectedTrip.TripProducts && selectedTrip.TripProducts.length > 0 && (
+                <div className="mt-4">
+                  <h6 className="text-lg font-medium text-gray-800 mb-2">Produits</h6>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm border-collapse">
+                      <thead className="bg-gray-100">
+                        <tr>
+                          <th className="p-2 text-left border-b">Désignation</th>
+                          <th className="p-2 text-left border-b">Qté Sortie (Caisses)</th>
+                          <th className="p-2 text-left border-b">Qté Sortie (Unités)</th>
+                          <th className="p-2 text-left border-b">Qté Retour (Caisses)</th>
+                          <th className="p-2 text-left border-b">Qté Retour (Unités)</th>
+                          <th className="p-2 text-left border-b">Qté Vendue</th>
+                          <th className="p-2 text-left border-b">Prix Unitaire (MAD)</th>
+                          <th className="p-2 text-left border-b">Total (MAD)</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="mt-2 text-sm text-gray-500">Aucune boîte enregistrée.</div>
-              )}
-              {invoiceData && (
-                <>
-                  <div className="mt-2">
-                    <h6 className="text-md font-medium text-black">Résumé Financier:</h6>
-                    <div className="flex flex-col gap-1">
-                      <div className="flex justify-between">
-                        <span>Montant Attendu:</span>
-                        <span>{(invoiceData.totals?.waitedAmount || 0)} MAD</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Montant Reçu:</span>
-                        <span>{(invoiceData.totals?.receivedAmount || 0)} MAD</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Bénéfice:</span>
-                        <span>{(invoiceData.totals?.benefit || 0)} MAD</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Différence:</span>
-                        <span>{(invoiceData.totals?.deff || 0)} MAD</span>
-                      </div>
-                    </div>
+                      </thead>
+                      <tbody>
+                        {selectedTrip.TripProducts.map((product, index) => {
+                          const capacityByBox = product.ProductAssociation?.capacityByBox || 0;
+                          const totalUnitsOut = product.qttOut * capacityByBox + product.qttOutUnite;
+                          const totalUnitsRetour = (product.qttReutour || 0) * capacityByBox + (product.qttReutourUnite || 0);
+                          const priceUnite = product.ProductAssociation?.priceUnite || 0;
+                          const totalRevenue = product.qttVendu * priceUnite;
+                          return (
+                            <tr key={index} className="border-b">
+                              <td className="p-2">{product.ProductAssociation?.designation || "Inconnu"}</td>
+                              <td className="p-2">{product.qttOut}</td>
+                              <td className="p-2">{product.qttOutUnite}</td>
+                              <td className="p-2">{product.qttReutour || 0}</td>
+                              <td className="p-2">{product.qttReutourUnite || 0}</td>
+                              <td className="p-2">{product.qttVendu || 0}</td>
+                              <td className="p-2">{priceUnite}</td>
+                              <td className="p-2">{totalRevenue}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
-                  {invoiceData.wastes && invoiceData.wastes.length > 0 ? (
-                    <div className="mt-2">
-                      <h6 className="text-md font-medium text-black">Déchets:</h6>
-                      <table className="w-full text-sm border-collapse">
-                        <thead>
-                          <tr className="border-b">
-                            <th className="text-left p-1">Produit</th>
-                            <th className="text-left p-1">Type</th>
-                            <th className="text-left p-1">Quantité</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {invoiceData.wastes.map((waste, index) => (
-                            <tr key={index} className="border-b">
-                              <td className="p-1">{waste.product}</td>
-                              <td className="p-1">{waste.type}</td>
-                              <td className="p-1">{waste.qtt}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="mt-2 text-sm text-gray-500">Aucun déchet enregistré.</div>
-                  )}
-                  {invoiceData.charges && invoiceData.charges.length > 0 ? (
-                    <div className="mt-2">
-                      <h6 className="text-md font-medium text-black">Charges:</h6>
-                      <table className="w-full text-sm border-collapse">
-                        <thead>
-                          <tr className="border-b">
-                            <th className="text-left p-1">Type</th>
-                            <th className="text-left p-1">Montant</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {invoiceData.charges.map((charge, index) => (
-                            <tr key={index} className="border-b">
-                              <td className="p-1">{charge.type}</td>
-                              <td className="p-1">{charge.amount} MAD</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="mt-2 text-sm text-gray-500">Aucune charge enregistrée.</div>
-                  )}
-                </>
+                </div>
               )}
-              <div className="mt-4 flex justify-end gap-2">
+
+              {/* Boxes Table */}
+              {selectedTrip.TripBoxes && selectedTrip.TripBoxes.length > 0 && (
+                <div className="mt-4">
+                  <h6 className="text-lg font-medium text-gray-800 mb-2">Boîtes</h6>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm border-collapse">
+                      <thead className="bg-gray-100">
+                        <tr>
+                          <th className="p-2 text-left border-b">Désignation</th>
+                          <th className="p-2 text-left border-b">Qté Initiale</th>
+                          <th className="p-2 text-left border-b">Qté Entrée</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedTrip.TripBoxes.map((box, index) => (
+                          <tr key={index} className="border-b">
+                            <td className="p-2">{box.BoxAssociation?.designation || "Inconnu"}</td>
+                            <td className="p-2">{box.qttOut}</td>
+                            <td className="p-2">{box.qttIn || 0}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Wastes Table */}
+              {selectedTrip.TripWastes && selectedTrip.TripWastes.length > 0 && (
+                <div className="mt-4">
+                  <h6 className="text-lg font-medium text-gray-800 mb-2">Déchets</h6>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm border-collapse">
+                      <thead className="bg-gray-100">
+                        <tr>
+                          <th className="p-2 text-left border-b">Produit</th>
+                          <th className="p-2 text-left border-b">Type</th>
+                          <th className="p-2 text-left border-b">Quantité</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedTrip.TripWastes.map((waste, index) => (
+                          <tr key={index} className="border-b">
+                            <td className="p-2">{waste.WasteAssociation?.ProductAssociation?.designation || waste.product || "Inconnu"}</td>
+                            <td className="p-2">{waste.type || "N/A"}</td>
+                            <td className="p-2">{waste.qtt || 0}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="mt-2 text-gray-700 font-medium">
+                    Total des déchets: {selectedTrip.totalWastes || 0} unités
+                  </p>
+                </div>
+              )}
+
+              {/* Charges Table */}
+              {selectedTrip.TripCharges && selectedTrip.TripCharges.length > 0 && (
+                <div className="mt-4">
+                  <h6 className="text-lg font-medium text-gray-800 mb-2">Charges</h6>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm border-collapse">
+                      <thead className="bg-gray-100">
+                        <tr>
+                          <th className="p-2 text-left border-b">Type</th>
+                          <th className="p-2 text-left border-b">Montant (MAD)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedTrip.TripCharges.map((charge, index) => (
+                          <tr key={index} className="border-b">
+                            <td className="p-2">{charge.ChargeAssociation?.type || "N/A"}</td>
+                            <td className="p-2">{(charge.amount || 0)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="mt-2 text-gray-700 font-medium">
+                    Total des charges: {(selectedTrip.totalCharges || 0)} MAD
+                  </p>
+                </div>
+              )}
+
+              {/* Financial Summary */}
+              <div className="mt-4">
+                <h6 className="text-lg font-medium text-gray-800 mb-2">Résumé Financier</h6>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-gray-700 font-medium">Montant Total:</p>
+                    <p className="text-gray-600">
+                      {selectedTrip.TripProducts
+                        ?.reduce((sum, p) => sum + (p.qttVendu * (p.ProductAssociation?.priceUnite || 0)), 0)
+                         || "0.00"} MAD
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-gray-700 font-medium">Montant Attendu:</p>
+                    <p className="text-gray-600">
+                      {selectedTrip.isActive ? "Non disponible" : (selectedTrip.waitedAmount || 0)} MAD
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-gray-700 font-medium">Montant Reçu:</p>
+                    <p className="text-gray-600">
+                      {selectedTrip.isActive ? "Non disponible" : (selectedTrip.receivedAmount || 0)} MAD
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-gray-700 font-medium">Différence:</p>
+                    <p className="text-gray-600">
+                      {selectedTrip.isActive ? "Non disponible" : (selectedTrip.deff || 0)} MAD
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-gray-700 font-medium">Bénéfice:</p>
+                    <p className="text-gray-600">
+                      {selectedTrip.isActive ? "Non disponible" : (selectedTrip.benefit || 0)} MAD
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="mt-6 flex justify-end gap-3">
                 <Button
                   onClick={closeModal}
-                  className="text-sm py-1.5 rounded-md bg-gray-300 hover:bg-gray-400"
+                  className="bg-gray-300 hover:bg-gray-400 text-gray-800"
                 >
                   Fermer
                 </Button>

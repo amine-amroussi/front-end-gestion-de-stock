@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { axiosInstance } from "@/utils/axiosInstance";
-import PrintInvoice from "./PrintInvoice";
+import PrintInvoice from "./PrintInvoice.jsx";
 import FinishTripForm from "./FinishTripForm";
 
 const TourneeActive = () => {
@@ -25,11 +25,14 @@ const TourneeActive = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [productsRes, boxesRes, employeesRes] = await Promise.all([
-          axiosInstance.get("/product"),
-          axiosInstance.get("/box"),
-          axiosInstance.get("/employee"),
-        ]);
+        // Fetch active trips along with other data
+        const [productsRes, boxesRes, employeesRes, activeTripsRes] =
+          await Promise.all([
+            axiosInstance.get("/product"),
+            axiosInstance.get("/box"),
+            axiosInstance.get("/employee"),
+            fetchActiveTrips(), // Call fetchActiveTrips to populate activeTrips state
+          ]);
         setProducts(productsRes.data.data?.products || []);
         setBoxes(boxesRes.data.boxes || []);
         setEmployees(employeesRes.data.data?.employees || []);
@@ -39,13 +42,28 @@ const TourneeActive = () => {
       }
     };
     fetchData();
-  }, []);
+  }, [fetchActiveTrips]); // Add fetchActiveTrips as a dependency
 
-  if (loadingTrip) return <p className="text-center text-gray-400">Chargement...</p>;
-  if (error) return <p className="text-center text-red-500">{error}</p>;
+  const calculateEstimatedRevenue = (tripProducts) => {
+    return tripProducts.reduce((total, product) => {
+      const capacityByBox = product.ProductAssociation?.capacityByBox || 0;
+      const priceUnite = product.ProductAssociation?.priceUnite || 0;
+      const totalUnits =
+        (product.qttOut || 0) * capacityByBox + (product.qttOutUnite || 0);
+      return total + totalUnits * priceUnite;
+    }, 0);
+  };
+
+  if (loadingTrip)
+    return <p className="text-center text-gray-400">Chargement...</p>;
+  // if (error) return <p className="text-center text-red-500">{error}</p>;
 
   if (!activeTrips || activeTrips.length === 0)
-    return <p className="text-center text-gray-400">Il n'y a pas de tournées actives.</p>;
+    return (
+      <p className="text-center text-gray-400">
+        Il n'y a pas de tournées actives.
+      </p>
+    );
 
   const handleShowDetails = async (tripId) => {
     try {
@@ -66,7 +84,12 @@ const TourneeActive = () => {
 
   const handleFinishTrip = async (formData) => {
     try {
-      console.log("Calling finishTrip with tripId:", selectedTripId, "and data:", formData); // Debug log
+      console.log(
+        "Calling finishTrip with tripId:",
+        selectedTripId,
+        "and data:",
+        formData
+      );
       await finishTrip(selectedTripId, formData);
       setTripDetails(null);
       setIsFinishModalOpen(false);
@@ -100,19 +123,24 @@ const TourneeActive = () => {
       assistant_id: trip.AssistantAssociation?.cin || "",
       date: trip.date,
       zone: trip.zone || "N/A",
-      tripProducts: trip.TripProducts?.map(product => ({
-        product_id: product.ProductAssociation?.id,
-        qttOut: product.qttOut,
-        qttOutUnite: product.qttOutUnite,
-      })) || [],
-      tripBoxes: trip.TripBoxes?.map(box => ({
-        box_id: box.BoxAssociation?.id,
-        qttOut: box.qttOut,
-      })) || [],
+      tripProducts:
+        trip.TripProducts?.map((product) => ({
+          product_id: product.ProductAssociation?.id,
+          qttOut: product.qttOut,
+          qttOutUnite: product.qttOutUnite,
+        })) || [],
+      tripBoxes:
+        trip.TripBoxes?.map((box) => ({
+          box_id: box.BoxAssociation?.id,
+          qttOut: box.qttOut,
+        })) || [],
     };
   };
 
   const formattedTripDetails = mapTripDetailsToFormData(tripDetails);
+  const estimatedRevenue = tripDetails
+    ? calculateEstimatedRevenue(tripDetails.TripProducts)
+    : 0;
 
   return (
     <div>
@@ -123,7 +151,9 @@ const TourneeActive = () => {
             className="flex flex-col w-75 text-black p-4 rounded-lg shadow-lg hover:shadow-xl transition-shadow"
           >
             <div className="flex justify-between items-center border-b border-gray-700 pb-2 mb-2">
-              <h4 className="text-lg font-medium text-black">Tournée #{trip.id}</h4>
+              <h4 className="text-lg font-medium text-black">
+                Tournée #{trip.id}
+              </h4>
               <span className="text-sm text-black-400">
                 {new Date(trip.date).toLocaleDateString()}
               </span>
@@ -131,7 +161,9 @@ const TourneeActive = () => {
             <div className="flex flex-col gap-1 text-sm">
               <div className="flex justify-between">
                 <span>Camion:</span>
-                <span className="text-black">{trip.TruckAssociation?.matricule || "N/A"}</span>
+                <span className="text-black">
+                  {trip.TruckAssociation?.matricule || "N/A"}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-black">Conducteur:</span>
@@ -175,7 +207,10 @@ const TourneeActive = () => {
               <h5 className="text-lg font-medium text-black">
                 Détails de la Tournée #{selectedTripId}
               </h5>
-              <button onClick={closeModal} className="text-black hover:text-red-500 text-xl font-bold">
+              <button
+                onClick={closeModal}
+                className="text-black hover:text-red-500 text-xl font-bold"
+              >
                 ×
               </button>
             </div>
@@ -208,51 +243,74 @@ const TourneeActive = () => {
                 <span className="text-black">Statut:</span>
                 <span>{tripDetails.isActive ? "Active" : "Terminée"}</span>
               </div>
-              {tripDetails.TripProducts && tripDetails.TripProducts.length > 0 && (
-                <div className="mt-2">
-                  <h6 className="text-md font-medium text-black">Produits Sortis (Matin):</h6>
-                  <table className="w-full text-sm border-collapse">
-                    <thead>
-                      <tr className="border-b">
-                        <th className="text-left p-1">Désignation</th>
-                        <th className="text-left p-1">Qté Caisses</th>
-                        <th className="text-left p-1">Qté Unités</th>
-                        <th className="text-left p-1">Unités Totales</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {tripDetails.TripProducts.map((product, index) => {
-                        const capacityByBox = product.ProductAssociation?.capacityByBox || 0;
-                        const totalUnits = product.qttOut * capacityByBox + product.qttOutUnite;
-                        return (
-                          <tr key={index} className="border-b">
-                            <td className="p-1">{product.ProductAssociation.designation}</td>
-                            <td className="p-1">{product.qttOut}</td>
-                            <td className="p-1">{product.qttOutUnite}</td>
-                            <td className="p-1">{totalUnits}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                    <tfoot>
-                      <tr className="border-t font-medium">
-                        <td className="p-1">Total</td>
-                        <td className="p-1">{tripDetails.TripProducts.length} produits</td>
-                        <td className="p-1"></td>
-                        <td className="p-1">
-                          {tripDetails.TripProducts.reduce((sum, product) => {
-                            const capacityByBox = product.ProductAssociation?.capacityByBox || 0;
-                            return sum + (product.qttOut * capacityByBox + product.qttOutUnite);
-                          }, 0)}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              )}
+              {tripDetails.TripProducts &&
+                tripDetails.TripProducts.length > 0 && (
+                  <div className="mt-2">
+                    <h6 className="text-md font-medium text-black">
+                      Produits Sortis (Matin):
+                    </h6>
+                    <table className="w-full text-sm border-collapse">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left p-1">Désignation</th>
+                          <th className="text-left p-1">Qté Caisses</th>
+                          <th className="text-left p-1">Qté Unités</th>
+                          <th className="text-left p-1">Unités Totales</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tripDetails.TripProducts.map((product, index) => {
+                          const capacityByBox =
+                            product.ProductAssociation?.capacityByBox || 0;
+                          const totalUnits =
+                            (product.qttOut || 0) * capacityByBox +
+                            (product.qttOutUnite || 0);
+                          return (
+                            <tr key={index} className="border-b">
+                              <td className="p-1">
+                                {product.ProductAssociation.designation}
+                              </td>
+                              <td className="p-1">{product.qttOut}</td>
+                              <td className="p-1">{product.qttOutUnite}</td>
+                              <td className="p-1">{totalUnits}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t font-medium">
+                          <td className="p-1">Total</td>
+                          <td className="p-1">
+                            {tripDetails.TripProducts.length} produits
+                          </td>
+                          <td className="p-1"></td>
+                          <td className="p-1">
+                            {tripDetails.TripProducts.reduce((sum, product) => {
+                              const capacityByBox =
+                                product.ProductAssociation?.capacityByBox || 0;
+                              return (
+                                sum +
+                                ((product.qttOut || 0) * capacityByBox +
+                                  (product.qttOutUnite || 0))
+                              );
+                            }, 0)}
+                          </td>
+                        </tr>
+                        <tr className="border-t font-medium">
+                          <td className="p-1">Revenu Estimé</td>
+                          <td className="p-1" colSpan="3">
+                            {estimatedRevenue.toFixed(2)} €
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
               {tripDetails.TripBoxes && tripDetails.TripBoxes.length > 0 && (
                 <div className="mt-2">
-                  <h6 className="text-md font-medium text-black">Boîtes Sorties (Matin):</h6>
+                  <h6 className="text-md font-medium text-black">
+                    Boîtes Sorties (Matin):
+                  </h6>
                   <table className="w-full text-sm border-collapse">
                     <thead>
                       <tr className="border-b">
@@ -263,7 +321,9 @@ const TourneeActive = () => {
                     <tbody>
                       {tripDetails.TripBoxes.map((box, index) => (
                         <tr key={index} className="border-b">
-                          <td className="p-1">{box.BoxAssociation.designation}</td>
+                          <td className="p-1">
+                            {box.BoxAssociation.designation}
+                          </td>
                           <td className="p-1">{box.qttOut}</td>
                         </tr>
                       ))}
@@ -271,7 +331,9 @@ const TourneeActive = () => {
                     <tfoot>
                       <tr className="border-t font-medium">
                         <td className="p-1">Total</td>
-                        <td className="p-1">{tripDetails.TripBoxes.length} boîtes</td>
+                        <td className="p-1">
+                          {tripDetails.TripBoxes.length} boîtes
+                        </td>
                       </tr>
                     </tfoot>
                   </table>
@@ -294,6 +356,7 @@ const TourneeActive = () => {
                 )}
                 <PrintInvoice
                   formData={formattedTripDetails}
+                  tripDetails={tripDetails} // Pass tripDetails
                   products={products}
                   boxes={boxes}
                   employees={employees}

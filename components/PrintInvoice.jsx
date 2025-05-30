@@ -1,29 +1,60 @@
 import { format } from "date-fns";
 
-const PrintInvoice = ({ formData, products, boxes, employees }) => {
+const PrintInvoice = ({
+  formData,
+  tripDetails,
+  products,
+  boxes,
+  employees,
+}) => {
   const getEmployeeName = (cin) => {
-    const employee = employees.find(emp => emp.cin === cin);
+    console.log("getEmployeeName called with cin:", cin);
+    console.log("employees array:", employees);
+    const employee = employees.find((emp) => emp.cin === cin?.toString());
+    console.log("Found employee:", employee);
     return employee ? employee.name : "N/A";
   };
 
-  const calculateTotalAmount = () => {
+  const calculateTotalAmount = (tripProducts) => {
     let total = 0;
-    formData.tripProducts.forEach((product) => {
-      const productData = products.find(p => p.id === parseInt(product.product_id));
+    tripProducts.forEach((product) => {
+      const productData =
+        product.ProductAssociation ||
+        products.find(
+          (p) =>
+            p.id ===
+            parseInt(product.product_id || product.ProductAssociation?.id)
+        );
       if (productData && productData.priceUnite) {
         const capacityByBox = productData.capacityByBox || 0;
-        const totalUnits = product.qttOut * capacityByBox + (product.qttOutUnite || 0);
+        const totalUnits =
+          (product.qttOut || 0) * capacityByBox + (product.qttOutUnite || 0);
         total += totalUnits * productData.priceUnite;
       }
     });
     return total.toFixed(2);
   };
 
-  const totalBoxesOut = formData.tripBoxes?.reduce((sum, box) => sum + box.qttOut, 0) || 0;
+  const totalBoxesOut =
+    tripDetails?.TripBoxes?.reduce((sum, box) => sum + (box.qttOut || 0), 0) ||
+    0;
+  const totalBoxesInitial =
+    tripDetails?.TripBoxes?.reduce((sum, box) => sum + (box.qttOut || 0), 0) ||
+    0; // For pre-confirmation/active trips
+  const totalBoxesIn =
+    tripDetails?.TripBoxes?.reduce((sum, box) => sum + (box.qttIn || 0), 0) ||
+    0;
   const currentDate = format(new Date(), "dd/MM/yyyy HH:mm");
 
+  // Determine if this is a pre-confirmation or active (unfinished) trip
+  const isPreOrActiveTrip =
+    tripDetails?.id?.toString().startsWith("PRE-") ||
+    tripDetails?.TripProducts?.every(
+      (product) => product.qttVendu === undefined || product.qttVendu === null
+    );
+
   const handlePrint = () => {
-    const totalAmount = calculateTotalAmount();
+    const totalAmount = calculateTotalAmount(tripDetails?.TripProducts || []);
     const invoiceContent = `
       <html>
       <head>
@@ -47,13 +78,30 @@ const PrintInvoice = ({ formData, products, boxes, employees }) => {
       <body>
         <div class="invoice">
           <div class="details">
-            <p><strong>Facture Pré-Tournée N°:</strong> N/A</p>
-            <p><strong>Camion:</strong> ${formData.truck_matricule || "N/A"}</p>
-            <p><strong>Conducteur:</strong> ${getEmployeeName(formData.driver_id)}</p>
-            <p><strong>Vendeur:</strong> ${getEmployeeName(formData.seller_id)}</p>
-            <p><strong>Assistant:</strong> ${getEmployeeName(formData.assistant_id)}</p>
-            <p><strong>Date de la Tournée:</strong> ${format(new Date(formData.date), "dd/MM/yyyy")}</p>
-            <p><strong>Zone:</strong> ${formData.zone || "N/A"}</p>
+            <p><strong>Facture Pré-Tournée N°:</strong> ${
+              tripDetails?.id || "N/A"
+            }</p>
+            <p><strong>Camion:</strong> ${
+              tripDetails?.TruckAssociation?.matricule ||
+              formData.truck_matricule ||
+              "N/A"
+            }</p>
+            <p><strong>Conducteur:</strong> ${getEmployeeName(
+              tripDetails?.driver_id || formData.driver_id
+            )}</p>
+            <p><strong>Vendeur:</strong> ${getEmployeeName(
+              tripDetails?.seller_id || formData.seller_id
+            )}</p>
+            <p><strong>Assistant:</strong> ${getEmployeeName(
+              tripDetails?.assistant_id || formData.assistant_id
+            )}</p>
+            <p><strong>Date de la Tournée:</strong> ${format(
+              new Date(tripDetails?.date || formData.date),
+              "dd/MM/yyyy"
+            )}</p>
+            <p><strong>Zone:</strong> ${
+              tripDetails?.zone || formData.zone || "N/A"
+            }</p>
             <p><strong>Imprimé le:</strong> ${currentDate}</p>
           </div>
           <div class="items">
@@ -62,34 +110,58 @@ const PrintInvoice = ({ formData, products, boxes, employees }) => {
               <thead>
                 <tr>
                   <th>Désignation</th>
-                  <th>Qté (Caisses)</th>
-                  <th>Qté (Unités)</th>
+                  <th>Prix (MAD)</th>
+                  <th>Qté Sortie (Caisses)</th>
+                  <th>Qté Sortie (Unités)</th>
+                  <th>${
+                    isPreOrActiveTrip
+                      ? "Quantité Totale (Unités)"
+                      : "Qté Vendue (Unités)"
+                  }</th>
                   <th>Prix (MAD)</th>
                 </tr>
               </thead>
               <tbody>
                 ${
-                  formData.tripProducts?.length > 0
-                    ? formData.tripProducts
-                        .map((product) => {
-                          const productData = products.find(p => p.id === parseInt(product.product_id));
-                          if (productData && productData.priceUnite) {
-                            const capacityByBox = productData.capacityByBox || 0;
-                            const totalUnits = product.qttOut * capacityByBox + (product.qttOutUnite || 0);
-                            const itemTotal = totalUnits * productData.priceUnite;
-                            return `
+                  tripDetails?.TripProducts?.length > 0
+                    ? tripDetails.TripProducts.map((product) => {
+                        const productData =
+                          product.ProductAssociation ||
+                          products.find(
+                            (p) =>
+                              p.id ===
+                              parseInt(
+                                product.product_id ||
+                                  product.ProductAssociation?.id
+                              )
+                          );
+                        if (productData && productData.priceUnite) {
+                          const capacityByBox = productData.capacityByBox || 0;
+                          const totalUnitsOut =
+                            (product.qttOut || 0) * capacityByBox +
+                            (product.qttOutUnite || 0);
+                          const displayUnits = isPreOrActiveTrip
+                            ? totalUnitsOut
+                            : product.qttVendu !== undefined &&
+                              product.qttVendu !== null
+                            ? product.qttVendu
+                            : totalUnitsOut;
+                          const itemTotal =
+                            displayUnits * productData.priceUnite;
+                          return `
                               <tr>
                                 <td>${productData.designation || "N/A"}</td>
-                                <td>${product.qttOut}</td>
+                                <td>${productData.priceUnite || "N/A"}</td>
+                                <td>${product.qttOut || 0}</td>
                                 <td>${product.qttOutUnite || 0}</td>
+                                <td>${displayUnits}</td>
                                 <td>${itemTotal.toFixed(2)}</td>
                               </tr>
                             `;
-                          }
-                          return "";
-                        })
-                        .join("")
-                    : '<tr><td colspan="4">Aucun produit</td></tr>'
+                        }
+                        return "";
+                      }).join("")
+                    : '<tr><td colspan="5">Aucun produit</td></tr>'
                 }
               </tbody>
             </table>
@@ -98,30 +170,35 @@ const PrintInvoice = ({ formData, products, boxes, employees }) => {
               <thead>
                 <tr>
                   <th>Désignation</th>
-                  <th>Qté Entrée</th>
-                  <th>Qté Sortie</th>
+                  <th>${isPreOrActiveTrip ? "Qté Initiale" : "Qté Entrée"}</th>
+                 
                 </tr>
               </thead>
               <tbody>
                 ${
-                  formData.tripBoxes?.length > 0
-                    ? formData.tripBoxes
-                        .map((box) => {
-                          const boxData = boxes.find(b => b.id === parseInt(box.box_id));
-                          return `
+                  tripDetails?.TripBoxes?.length > 0
+                    ? tripDetails.TripBoxes.map((box) => {
+                        const boxData =
+                          box.BoxAssociation ||
+                          boxes.find(
+                            (b) =>
+                              b.id ===
+                              parseInt(box.box_id || box.BoxAssociation?.id)
+                          );
+                        const displayQty = isPreOrActiveTrip
+                          ? box.qttOut || 0
+                          : box.qttIn || 0;
+                        return `
                             <tr>
                               <td>${boxData?.designation || "N/A"}</td>
-                              <td>0</td>
-                              <td>${box.qttOut}</td>
+                              <td>${box.qttOut || 0}</td>
                             </tr>
                           `;
-                        })
-                        .join("")
+                      }).join("")
                     : '<tr><td colspan="3">Aucune caisse</td></tr>'
                 }
                 <tr>
                   <td><strong>Total</strong></td>
-                  <td>0</td>
                   <td>${totalBoxesOut}</td>
                 </tr>
               </tbody>
@@ -148,8 +225,12 @@ const PrintInvoice = ({ formData, products, boxes, employees }) => {
       printWindow.document.write(invoiceContent);
       printWindow.document.close();
     } else {
-      console.error("Failed to open print window. Please allow popups for this site.");
-      alert("Impossible d'ouvrir la fenêtre d'impression. Veuillez autoriser les popups pour ce site.");
+      console.error(
+        "Failed to open print window. Please allow popups for this site."
+      );
+      alert(
+        "Impossible d'ouvrir la fenêtre d'impression. Veuillez autoriser les popups pour ce site."
+      );
     }
   };
 

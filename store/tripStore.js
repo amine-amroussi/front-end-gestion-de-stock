@@ -110,44 +110,51 @@ export const useTrip = create((set, get) => ({
     }
   },
   startTrip: async (tripData) => {
-    try {
-      console.log("Sending startTrip request with data:", tripData);
-      set((state) => ({
-        tripState: { ...state.tripState, loadingTrip: true, error: null },
-      }));
+  try {
+    console.log("Sending startTrip request with data:", tripData);
+    set((state) => ({
+      tripState: { ...state.tripState, loadingTrip: true, error: null },
+    }));
 
-      const response = await axiosInstance.post(`/trip/start`, tripData);
-      console.log("startTrip response:", response.data);
+    const response = await axiosInstance.post(`/trip/start`, tripData);
+    console.log("startTrip response:", response.data);
 
-      if (response.status === 201) {
-        set((state) => ({
-          tripState: {
-            ...state.tripState,
-            activeTrips: [...state.tripState.activeTrips, response.data.trip],
-          },
-        }));
-        await get().fetchActiveTrips();
-      }
-    } catch (error) {
-      const errorMessage = error.response?.data?.message || "Erreur lors du démarrage de la tournée.";
-      console.error("startTrip error:", error.response?.data || error);
+    if (response.status === 201) {
       set((state) => ({
-        tripState: { ...state.tripState, loadingTrip: false, error: errorMessage },
+        tripState: {
+          ...state.tripState,
+          activeTrips: [...state.tripState.activeTrips, response.data.trip],
+        },
       }));
-      toast.error(errorMessage);
-      throw error;
-    } finally {
-      set((state) => ({
-        tripState: { ...state.tripState, loadingTrip: false },
-      }));
+      await get().fetchActiveTrips();
     }
-  },
+  } catch (error) {
+    console.log(error);
+    
+    const errorMessage = error.response?.data?.message || "Erreur lors du démarrage de la tournée.";
+    console.error("startTrip error:", {
+      message: errorMessage,
+      status: error.response?.status,
+      data: error.response?.data,
+      request: tripData,
+    });
+    set((state) => ({
+      tripState: { ...state.tripState, loadingTrip: false, error: errorMessage },
+    }));
+    toast.error(errorMessage);
+    throw error;
+  } finally {
+    set((state) => ({
+      tripState: { ...state.tripState, loadingTrip: false },
+    }));
+  }
+},
 finishTrip: async (tripId, tripData) => {
   try {
     set((state) => ({
       tripState: { ...state.tripState, loadingTrip: true, error: null },
     }));
-    console.log("Sending finishTrip request for tripId:", tripId, "with data:", tripData);
+    console.log("Sending finishTrip request for tripId:", tripId, "with data:", JSON.stringify(tripData, null, 2));
 
     const response = await axiosInstance.post(`/trip/finish/${tripId}`, tripData);
     console.log("finishTrip response:", response.data);

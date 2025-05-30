@@ -6,7 +6,7 @@ import { Label } from "@radix-ui/react-label";
 import { X, Plus } from "lucide-react";
 import { axiosInstance } from "@/utils/axiosInstance";
 import { toast } from "sonner";
-import PrintInvoice from "./PrintInvoice"; // Adjust the path based on your project structure
+import PrintInvoice from "./PrintInvoice";
 
 const steps = ["Vehicle and Personnel", "Date and Zone", "Products", "Boxes", "Révision"];
 
@@ -25,6 +25,8 @@ const StartTripForm = ({ open, onOpenChange, onTripStarted }) => {
   const [employees, setEmployees] = useState([]);
   const [products, setProducts] = useState([]);
   const [boxes, setBoxes] = useState([]);
+  const [remainingProducts, setRemainingProducts] = useState([]); // Remaining products
+  const [remainingBoxes, setRemainingBoxes] = useState([]); // New state for remaining boxes
   const [loading, setLoading] = useState(false);
   const [activeStep, setActiveStep] = useState(1);
   const [formErrors, setFormErrors] = useState({});
@@ -34,27 +36,83 @@ const StartTripForm = ({ open, onOpenChange, onTripStarted }) => {
       try {
         const [trucksRes, employeesRes, productsRes, boxesRes] = await Promise.all([
           axiosInstance.get("/truck"),
-          axiosInstance.get("/employee"),
-          axiosInstance.get("/product"),
+          axiosInstance.get("/trip/employees/all"),
+          axiosInstance.get("/trip/products/all"),
           axiosInstance.get("/box"),
         ]);
         setTrucks(trucksRes.data.trucks || []);
-        setEmployees(employeesRes.data.data?.employees || []);
-        setProducts(productsRes.data.data?.products || []);
+        setEmployees(employeesRes.data.employees || []);
+        setProducts(productsRes.data.products || []);
         setBoxes(boxesRes.data.boxes || []);
-
-        console.log("formData:", formData);
-        console.log("employees:", employeesRes.data?.data?.employees || []);
-        console.log("driver_id match:", employeesRes.data?.data?.employees.some(emp => emp.cin === formData.driver_id));
-        console.log("seller_id match:", employeesRes.data?.data?.employees.some(emp => emp.cin === formData.seller_id));
-        console.log("assistant_id match:", employeesRes.data?.data?.employees.some(emp => emp.cin === formData.assistant_id));
       } catch (error) {
         setFormErrors({ fetch: "Erreur lors de la récupération des données pour le formulaire." });
         console.error("Fetch error:", error);
       }
     };
     fetchData();
-  }, [formData]);
+  }, []);
+
+  useEffect(() => {
+    const fetchRemainingItems = async () => {
+      if (formData.truck_matricule) {
+        try {
+          const response = await axiosInstance.get(`/trip/last/${formData.truck_matricule}`);
+          console.log("fetchRemainingItems response:", response.data);
+          const tripProducts = response.data.tripProducts || [];
+          const tripBoxes = response.data.tripBoxes || [];
+
+          // Filter remaining products
+          const remaining = tripProducts
+            .filter(tp => (tp.qttReutour > 0 || tp.qttReutourUnite > 0))
+            .map(tp => ({
+              product_id: tp.product.toString(),
+              qttOut: tp.qttReutour || 0,
+              qttOutUnite: tp.qttReutourUnite || 0,
+            }));
+          setRemainingProducts(remaining);
+          setFormData(prev => ({
+            ...prev,
+            tripProducts: [...remaining],
+          }));
+
+          // Filter remaining boxes
+          const remainingBoxData = tripBoxes
+            .filter(tb => tb.qttIn > 0)
+            .map(tb => ({
+              box_id: tb.box.toString(),
+              qttOut: tb.qttIn || 0,
+            }));
+          setRemainingBoxes(remainingBoxData);
+          setFormData(prev => ({
+            ...prev,
+            tripBoxes: [...remainingBoxData],
+          }));
+        } catch (error) {
+          console.error("fetchRemainingItems error:", error);
+          if (error.response?.status === 404) {
+            setRemainingProducts([]);
+            setRemainingBoxes([]);
+            setFormData(prev => ({
+              ...prev,
+              tripProducts: [],
+              tripBoxes: [],
+            }));
+          } else {
+            toast.error("Erreur lors de la récupération des produits et boîtes restants dans le camion.");
+          }
+        }
+      } else {
+        setRemainingProducts([]);
+        setRemainingBoxes([]);
+        setFormData(prev => ({
+          ...prev,
+          tripProducts: [],
+          tripBoxes: [],
+        }));
+      }
+    };
+    fetchRemainingItems();
+  }, [formData.truck_matricule]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -126,13 +184,28 @@ const StartTripForm = ({ open, onOpenChange, onTripStarted }) => {
       tripBoxes: [],
     });
     setFormErrors({});
+    setRemainingProducts([]);
+    setRemainingBoxes([]);
   };
 
   const handleSubmit = async () => {
     console.log("Submitting form data:", formData);
     setLoading(true);
     try {
-      await onTripStarted(formData);
+      const submitData = {
+        ...formData,
+        assistant_id: formData.assistant_id || null,
+        tripProducts: formData.tripProducts.map(p => ({
+          product_id: parseInt(p.product_id),
+          qttOut: p.qttOut,
+          qttOutUnite: p.qttOutUnite,
+        })),
+        tripBoxes: formData.tripBoxes.map(b => ({
+          box_id: parseInt(b.box_id),
+          qttOut: b.qttOut,
+        })),
+      };
+      await onTripStarted(submitData);
       toast.success("Tournée démarrée avec succès !");
       cancel();
     } catch (error) {
@@ -175,7 +248,6 @@ const StartTripForm = ({ open, onOpenChange, onTripStarted }) => {
       }
     }
     setFormErrors(errors);
-    console.log("Validation errors:", errors);
     return Object.keys(errors).length === 0;
   };
 
@@ -199,7 +271,28 @@ const StartTripForm = ({ open, onOpenChange, onTripStarted }) => {
         total += totalUnits * productData.priceUnite;
       }
     });
-    return total;
+    return total.toFixed(2);
+  };
+
+  const preTripData = {
+    id: "PRE-" + Date.now(),
+    truck_matricule: formData.truck_matricule,
+    driver_id: formData.driver_id,
+    seller_id: formData.seller_id,
+    assistant_id: formData.assistant_id,
+    date: formData.date,
+    zone: formData.zone,
+    TripProducts: formData.tripProducts.map(p => ({
+      product_id: p.product_id,
+      qttOut: p.qttOut,
+      qttOutUnite: p.qttOutUnite,
+      ProductAssociation: products.find(prod => prod.id === parseInt(p.product_id)),
+    })),
+    TripBoxes: formData.tripBoxes.map(b => ({
+      box_id: b.box_id,
+      qttOut: b.qttOut,
+      BoxAssociation: boxes.find(box => box.id === parseInt(b.box_id)),
+    })),
   };
 
   return (
@@ -378,7 +471,32 @@ const StartTripForm = ({ open, onOpenChange, onTripStarted }) => {
 
         {activeStep === 3 && (
           <div className="space-y-3">
-            <h3 className="text-base font-semibold">Produits</h3>
+            {/* Show remaining products only if there are any */}
+            {remainingProducts.length > 0 && (
+              <div className="mb-4">
+                <h3 className="text-base font-semibold">Produits Restants dans le Camion</h3>
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left p-1">Désignation</th>
+                      <th className="text-left p-1">Qté Caisses Restantes</th>
+                      <th className="text-left p-1">Qté Unités Restantes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {remainingProducts.map((rp, index) => (
+                      <tr key={index} className="border-b">
+                        <td className="p-1">{products.find(p => p.id === parseInt(rp.product_id))?.designation || "N/A"}</td>
+                        <td className="p-1">{rp.qttOut || 0}</td>
+                        <td className="p-1">{rp.qttOutUnite || 0}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <h3 className="text-base font-semibold">Nouveaux Produits</h3>
             {formErrors.products && (
               <p className="text-red-500 text-sm">{formErrors.products}</p>
             )}
@@ -392,7 +510,7 @@ const StartTripForm = ({ open, onOpenChange, onTripStarted }) => {
                     className={`w-full border rounded p-2 text-sm ${
                       formErrors[`product_${index}_product_id`] ? "border-red-500" : "border-gray-300"
                     }`}
-                    disabled={loading}
+                    disabled={loading || index < remainingProducts.length}
                   >
                     <option value="">Sélectionnez un produit</option>
                     {products.map((p) => (
@@ -437,14 +555,16 @@ const StartTripForm = ({ open, onOpenChange, onTripStarted }) => {
                     )}
                   </div>
                 </div>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => removeProduct(index)}
-                  disabled={loading}
-                >
-                  <X className="w-4 h-4" />
-                </Button>
+                {index >= remainingProducts.length && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => removeProduct(index)}
+                    disabled={loading}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                )}
               </div>
             ))}
             <Button
@@ -460,7 +580,30 @@ const StartTripForm = ({ open, onOpenChange, onTripStarted }) => {
 
         {activeStep === 4 && (
           <div className="space-y-3">
-            <h3 className="text-base font-semibold">Boîtes</h3>
+            {/* Show remaining boxes only if there are any */}
+            {remainingBoxes.length > 0 && (
+              <div className="mb-4">
+                <h3 className="text-base font-semibold">Boîtes Restantes dans le Camion</h3>
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left p-1">Désignation</th>
+                      <th className="text-left p-1">Qté Restante</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {remainingBoxes.map((rb, index) => (
+                      <tr key={index} className="border-b">
+                        <td className="p-1">{boxes.find(b => b.id === parseInt(rb.box_id))?.designation || "N/A"}</td>
+                        <td className="p-1">{rb.qttOut || 0}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <h3 className="text-base font-semibold">Nouvelles Boîtes</h3>
             {formErrors.boxes && (
               <p className="text-red-500 text-sm">{formErrors.boxes}</p>
             )}
@@ -474,7 +617,7 @@ const StartTripForm = ({ open, onOpenChange, onTripStarted }) => {
                     className={`w-full border rounded p-2 text-sm ${
                       formErrors[`box_${index}_box_id`] ? "border-red-500" : "border-gray-300"
                     }`}
-                    disabled={loading}
+                    disabled={loading || index < remainingBoxes.length}
                   >
                     <option value="">Sélectionnez une boîte</option>
                     {boxes.map((b) => (
@@ -503,14 +646,16 @@ const StartTripForm = ({ open, onOpenChange, onTripStarted }) => {
                     <p className="text-red-500 text-xs mt-1">{formErrors[`box_${index}_qttOut`]}</p>
                   )}
                 </div>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => removeBox(index)}
-                  disabled={loading}
-                >
-                  <X className="w-4 h-4" />
-                </Button>
+                {index >= remainingBoxes.length && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => removeBox(index)}
+                    disabled={loading}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                )}
               </div>
             ))}
             <Button
@@ -609,6 +754,7 @@ const StartTripForm = ({ open, onOpenChange, onTripStarted }) => {
             <div className="mt-2">
               <PrintInvoice
                 formData={formData}
+                tripDetails={preTripData}
                 products={products}
                 boxes={boxes}
                 employees={employees}

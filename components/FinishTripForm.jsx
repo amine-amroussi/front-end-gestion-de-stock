@@ -17,16 +17,19 @@ const FinishTripForm = ({ tripDetails, onSubmit, onCancel, products, boxes }) =>
 
   useEffect(() => {
     if (tripDetails) {
+      console.log("Trip Products:", tripDetails.TripProducts);
       setFormData({
         tripProducts: tripDetails.TripProducts.map(p => ({
-          product_id: p.product,
-          designation: products.find(prod => prod.id === p.product)?.designation || "Inconnu",
+          product_id: parseInt(p.product),
+          designation: products.find(prod => prod.id === parseInt(p.product))?.designation || "Inconnu",
+          priceUnite: products.find(prod => prod.id === parseInt(p.product))?.priceUnite || 0,
+          capacityByBox: products.find(prod => prod.id === parseInt(p.product))?.capacityByBox || 0,
           qttReutour: 0,
           qttReutourUnite: 0,
         })),
         tripBoxes: tripDetails.TripBoxes.map(b => ({
-          box_id: b.box,
-          designation: boxes.find(box => box.id === b.box)?.designation || "Inconnu",
+          box_id: parseInt(b.box),
+          designation: boxes.find(box => box.id === parseInt(b.box))?.designation || "Inconnu",
           qttIn: 0,
         })),
         tripWastes: [],
@@ -40,6 +43,17 @@ const FinishTripForm = ({ tripDetails, onSubmit, onCancel, products, boxes }) =>
     const updatedForm = { ...formData };
     updatedForm[type][index] = { ...updatedForm[type][index], [field]: value };
     setFormData(updatedForm);
+  };
+
+  const calculateSoldUnits = (product, index) => {
+    const { capacityByBox } = product;
+    const qttOut = tripDetails.TripProducts[index].qttOut || 0;
+    const qttOutUnite = tripDetails.TripProducts[index].qttOutUnite || 0;
+    const qttReutour = parseInt(product.qttReutour) || 0;
+    const qttReutourUnite = parseInt(product.qttReutourUnite) || 0;
+    const totalUnitsOut = qttOut * capacityByBox + qttOutUnite;
+    const totalUnitsReturned = qttReutour * capacityByBox + qttReutourUnite;
+    return totalUnitsOut - totalUnitsReturned;
   };
 
   const addWaste = () => {
@@ -75,8 +89,10 @@ const FinishTripForm = ({ tripDetails, onSubmit, onCancel, products, boxes }) =>
     try {
       const submitData = {
         tripProducts: formData.tripProducts.map(p => {
-          if (!products.some(prod => prod.id === p.product_id)) {
-            throw new Error(`Produit invalide (ID: ${p.product_id})`);
+          const productExists = products.some(prod => prod.id === p.product_id);
+          if (!productExists) {
+            console.warn(`Produit invalide (ID: ${p.product_id}) ignoré. Vérifiez les données des produits.`);
+            return null;
           }
           const qttReutour = parseInt(p.qttReutour) || 0;
           const qttReutourUnite = parseInt(p.qttReutourUnite) || 0;
@@ -88,7 +104,7 @@ const FinishTripForm = ({ tripDetails, onSubmit, onCancel, products, boxes }) =>
             qttReutour,
             qttReutourUnite,
           };
-        }),
+        }).filter(p => p !== null),
         tripBoxes: formData.tripBoxes.map(b => {
           if (!boxes.some(box => box.id === b.box_id)) {
             throw new Error(`Boîte invalide (ID: ${b.box_id})`);
@@ -143,35 +159,66 @@ const FinishTripForm = ({ tripDetails, onSubmit, onCancel, products, boxes }) =>
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
         <h6 className="text-md font-medium text-black">Produits Retournés:</h6>
-        {formData.tripProducts.map((product, index) => (
-          <div key={index} className="border p-2 rounded space-y-2 mt-2">
-            <p>
-              {product.designation} (ID: {product.product_id})
-              (Sortie: {tripDetails.TripProducts[index].qttOut} caisses,{" "}
-              {tripDetails.TripProducts[index].qttOutUnite} unités)
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label>Qté Retour (Caisses)</Label>
-                <Input
-                  type="number"
-                  value={product.qttReutour}
-                  onChange={(e) => handleChange("tripProducts", index, "qttReutour", e.target.value)}
-                  min="0"
-                />
-              </div>
-              <div>
-                <Label>Qté Retour (Unités)</Label>
-                <Input
-                  type="number"
-                  value={product.qttReutourUnite}
-                  onChange={(e) => handleChange("tripProducts", index, "qttReutourUnite", e.target.value)}
-                  min="0"
-                />
+        {formData.tripProducts.map((product, index) => {
+          const soldUnits = calculateSoldUnits(product, index);
+          const totalPrice = soldUnits * product.priceUnite;
+          return (
+            <div key={index} className="border p-2 rounded space-y-2 mt-2">
+              <p>
+                {product.designation} (ID: {product.product_id})
+                (Sortie: {tripDetails.TripProducts[index].qttOut} caisses,{" "}
+                {tripDetails.TripProducts[index].qttOutUnite} unités)
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label>Qté Retour (Caisses)</Label>
+                  <Input
+                    type="number"
+                    value={product.qttReutour}
+                    onChange={(e) => handleChange("tripProducts", index, "qttReutour", e.target.value)}
+                    min="0"
+                  />
+                </div>
+                <div>
+                  <Label>Qté Retour (Unités)</Label>
+                  <Input
+                    type="number"
+                    value={product.qttReutourUnite}
+                    onChange={(e) => handleChange("tripProducts", index, "qttReutourUnite", e.target.value)}
+                    min="0"
+                  />
+                </div>
+                <div>
+                  <Label>Qté Vendue (Unités)</Label>
+                  <Input
+                    type="text"
+                    value={soldUnits}
+                    readOnly
+                    className="bg-gray-100"
+                  />
+                </div>
+                <div>
+                  <Label>Prix Unitaire (MAD)</Label>
+                  <Input
+                    type="text"
+                    value={product.priceUnite}
+                    readOnly
+                    className="bg-gray-100"
+                  />
+                </div>
+                <div>
+                  <Label>Prix Total (MAD)</Label>
+                  <Input
+                    type="text"
+                    value={totalPrice}
+                    readOnly
+                    className="bg-gray-100"
+                  />
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div>
@@ -180,7 +227,7 @@ const FinishTripForm = ({ tripDetails, onSubmit, onCancel, products, boxes }) =>
           <div key={index} className="border p-2 rounded space-y-2 mt-2">
             <p>
               {box.designation} (ID: {box.box_id})
-              (Sortie: {tripDetails.TripBoxes[index].qttOut})
+              (Qté Initiale: {tripDetails.TripBoxes[index].qttOut})
             </p>
             <div>
               <Label>Qté Entrée</Label>
