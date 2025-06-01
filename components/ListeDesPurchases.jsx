@@ -7,7 +7,7 @@ import AddPurchase from "./AddPurchase";
 import PurchaseInfoModal from "./PurchaseInfoModal";
 import { Button } from "./ui/button";
 import { format } from "date-fns";
-import PrintInvoice from "./PrintInvoice";
+import PrintInvoice from "./PrintInvoice.js";
 
 const ListeDesPurchases = () => {
   const [addOpen, setAddOpen] = useState(false);

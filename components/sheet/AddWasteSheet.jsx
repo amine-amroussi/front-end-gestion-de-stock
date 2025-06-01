@@ -20,17 +20,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { toast } from "sonner";
+import { ShowToast } from "@/utils/toast"; // Use ShowToast instead of sonner toast
 
 const AddWasteSheet = ({ open, setOpen, onWasteAdded }) => {
-  const { createWaste, fetchWastes, error } = useWastes();
-  const { productState: { products, loadingProduct }, fetchAllProducts } = useProduct();
+  const {
+    createWaste,
+    fetchWastes,
+    wasteState: { error },
+  } = useWastes();
+  const {
+    productState: { products, loadingProduct },
+    fetchAllProducts,
+  } = useProduct();
 
   const [formData, setFormData] = useState({
     product: "",
     qtt: "",
     type: "",
   });
+  const [formErrors, setFormErrors] = useState({});
 
   useEffect(() => {
     fetchAllProducts(); // Fetch products when the sheet opens
@@ -38,34 +46,65 @@ const AddWasteSheet = ({ open, setOpen, onWasteAdded }) => {
 
   useEffect(() => {
     if (error) {
-      toast.error(error.message || "Erreur lors de la gestion des déchets.");
+      ShowToast.error(error || "Erreur lors de la gestion des déchets.");
     }
   }, [error]);
 
   const handleChange = (e) => {
+    const { name, value } = e.target;
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value,
+      [name]: name === "qtt" ? parseFloat(value) || "" : value, // Convert qtt to number
     });
+    setFormErrors({ ...formErrors, [name]: "" });
   };
 
   const handleProductChange = (value) => {
     setFormData({ ...formData, product: value });
+    setFormErrors({ ...formErrors, product: "" });
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      await createWaste(formData);
-      toast.success("Déchet ajouté avec succès !");
-      setFormData({ product: "", qtt: "", type: "" });
-      setOpen(false);
-      if (onWasteAdded) onWasteAdded();
-      fetchWastes();
-    } catch (err) {
-      toast.error(err.message || "Erreur lors de l'ajout du déchet.");
-    }
-  };
+ const validateForm = () => {
+  const errors = {};
+  if (!formData.product) {
+    errors.product = "Produit requis";
+    ShowToast.errorValidation("Produit", "Veuillez sélectionner un produit.");
+  }
+  if (!formData.qtt || formData.qtt <= 0 || isNaN(formData.qtt)) {
+    errors.qtt = "Quantité positive requise";
+    ShowToast.errorValidation("Quantité", "Veuillez entrer une quantité positive.");
+  }
+  if (!formData.type) {
+    errors.type = "Type requis";
+    ShowToast.errorValidation("Type", "Veuillez entrer un type de déchet.");
+  }
+  setFormErrors(errors);
+  return Object.keys(errors).length === 0;
+};
+
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  if (!validateForm()) return;
+
+  const toastId = ShowToast.loading("Ajout du déchet...");
+  try {
+    // Ensure qtt is a number before sending
+    const wasteInfo = {
+      ...formData,
+      qtt: parseFloat(formData.qtt), // Ensure qtt is a number
+    };
+    await createWaste(wasteInfo);
+    setFormData({ product: "", qtt: "", type: "" });
+    setOpen(false);
+    if (onWasteAdded) onWasteAdded();
+    fetchWastes();
+    ShowToast.dismiss(toastId);
+  } catch (err) {
+    const errorMessage = err.response?.data?.message || "Erreur lors de l'ajout du déchet.";
+    ShowToast.dismiss(toastId);
+    ShowToast.error(errorMessage);
+  }
+};
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -76,7 +115,7 @@ const AddWasteSheet = ({ open, setOpen, onWasteAdded }) => {
             Remplissez le formulaire pour ajouter un nouveau déchet.
           </SheetDescription>
         </SheetHeader>
-        {error && <p className="text-red-500 px-4">{error.message}</p>}
+        {error && <p className="text-red-500 px-4">{error}</p>}
         <form className="text-sm flex flex-col gap-4" onSubmit={handleSubmit}>
           <div className="flex flex-col gap-2 px-4">
             <Label htmlFor="product">Produit</Label>
@@ -107,6 +146,9 @@ const AddWasteSheet = ({ open, setOpen, onWasteAdded }) => {
                 )}
               </SelectContent>
             </Select>
+            {formErrors.product && (
+              <p className="text-red-500 text-xs mt-1">{formErrors.product}</p>
+            )}
           </div>
           <div className="flex flex-col gap-2 px-4">
             <Label htmlFor="qtt">Quantité</Label>
@@ -118,7 +160,11 @@ const AddWasteSheet = ({ open, setOpen, onWasteAdded }) => {
               value={formData.qtt}
               onChange={handleChange}
               disabled={loadingProduct}
+              min="0"
             />
+            {formErrors.qtt && (
+              <p className="text-red-500 text-xs mt-1">{formErrors.qtt}</p>
+            )}
           </div>
           <div className="flex flex-col gap-2 px-4">
             <Label htmlFor="type">Type</Label>
@@ -131,6 +177,9 @@ const AddWasteSheet = ({ open, setOpen, onWasteAdded }) => {
               onChange={handleChange}
               disabled={loadingProduct}
             />
+            {formErrors.type && (
+              <p className="text-red-500 text-xs mt-1">{formErrors.type}</p>
+            )}
           </div>
           <SheetFooter className="px-4">
             <Button type="submit" disabled={loadingProduct}>

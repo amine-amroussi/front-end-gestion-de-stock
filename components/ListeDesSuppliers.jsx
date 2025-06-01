@@ -13,6 +13,7 @@ const ListeDesSuppliers = () => {
   const {
     supplierState: { suppliers, loadingSupplier, error, pagination },
     fetchAllSuppliers,
+    deleteSupplier,
     nextPage,
   } = useSupplier();
 
@@ -37,6 +38,10 @@ const ListeDesSuppliers = () => {
     setSelectedId(null);
   };
 
+  const handleDelete = async (id) => {
+    await deleteSupplier(id);
+  };
+
   const renderPageNumbers = () => {
     const pageNumbers = [];
     const maxPagesToShow = 5;
@@ -59,27 +64,25 @@ const ListeDesSuppliers = () => {
   };
 
   return (
-    <div className="container mx-auto p-4">
+    <div className="container mx-auto">
       <div className="flex justify-between items-center mb-4">
-        <h1 className="text-2xl font-bold">Liste des Fournisseurs</h1>
-        {/* <AddSupplierSheet open={addOpen} setOpen={setAddOpen} onSupplierAdded={handleSupplierAdded} /> */}
-        {/* <SheetTrigger asChild>
-          <Button onClick={() => setAddOpen(true)}>Ajouter Fournisseur</Button>
-        </SheetTrigger> */}
+        <h1 className="font-semibold">Liste des Fournisseur</h1>
+        <Button onClick={() => setAddOpen(true)}>Ajouter Fournisseur</Button>
       </div>
 
-      {loadingSupplier && <p className="text-center">Chargement des fournisseurs...</p>}
-      {error && <p className="text-red-500 text-center">{error}</p>}
-      {!loadingSupplier && !error && suppliers.length === 0 && (
-        <p className="text-center">Aucun fournisseur trouvé.</p>
-      )}
-
+      <AddSupplierSheet open={addOpen} setOpen={setAddOpen} onSupplierAdded={handleSupplierAdded} />
       <EditSupplierSheet
         open={editOpen}
         setOpen={setEditOpen}
         id={selectedId}
         onSupplierEdited={handleSupplierEdited}
       />
+
+      {loadingSupplier && <p className="text-center">Chargement des fournisseurs...</p>}
+      {error && <p className="text-red-500 text-center">{error}</p>}
+      {!loadingSupplier && !error && suppliers.length === 0 && (
+        <p className="text-center">Aucun fournisseur trouvé.</p>
+      )}
 
       {!loadingSupplier && !error && suppliers.length > 0 && (
         <div className="overflow-x-auto">
@@ -114,7 +117,7 @@ const ListeDesSuppliers = () => {
                   <td className="px-6 py-4 whitespace-nowrap">{supplier.tel}</td>
                   <td className="px-6 py-4 whitespace-nowrap">{supplier.address}</td>
                   <td className="px-6 py-4 whitespace-nowrap flex gap-2">
-                    <button>
+                    <button onClick={() => handleDelete(supplier.id)}>
                       <Trash className="w-4 h-4 cursor-pointer text-red-500 hover:text-red-700" />
                     </button>
                     <button onClick={() => { setEditOpen(true); setSelectedId(supplier.id); }}>

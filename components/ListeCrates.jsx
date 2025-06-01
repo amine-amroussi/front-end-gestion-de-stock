@@ -1,7 +1,7 @@
 "use client";
 import { useBox } from "@/store/boxStore";
 import { Trash, Edit, Boxes } from "lucide-react";
-import { useEffect, useLayoutEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import EditBoxSheet from "./sheet/EditBoxSheet";
 
 const ListeCrates = () => {
@@ -13,11 +13,12 @@ const ListeCrates = () => {
 
   useEffect(() => {
     fetchAllBoxes();
-  }, []);
+  }, [fetchAllBoxes]);
 
   return (
     <div className="overflow-x-auto">
       <EditBoxSheet id={boxId} open={open} setOpen={setOpen} />
+      {boxState.lodingBox && <p className="text-gray-600 mb-4">Chargement...</p>}
       <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>
@@ -40,9 +41,6 @@ const ListeCrates = () => {
               Sortes
             </th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Capacity
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Actions
             </th>
           </tr>
@@ -55,16 +53,13 @@ const ListeCrates = () => {
                 className="text-sm text-gray-500 border-b hover:text-black ease-in delay-75 transition-all"
               >
                 <td className="px-6 py-4 whitespace-nowrap">#{box?.id}</td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  {box.designation}
-                </td>
+                <td className="px-6 py-4 whitespace-nowrap">{box.designation}</td>
                 <td className="px-6 py-4 whitespace-nowrap">{box.type}</td>
-                <td className="px-6 py-4 whitespace-nowrap">{box.inStock}</td>
-                <td className="px-6 py-4 whitespace-nowrap">{box.empty}</td>
-                <td className="px-6 py-4 whitespace-nowrap">{box.sent}</td>
-                <td className="px-6 py-4 whitespace-nowrap">{box.capacity}</td>
+                <td className="px-6 py-4 whitespace-nowrap">{box.inStock || 0}</td>
+                <td className="px-6 py-4 whitespace-nowrap">{box.empty || 0}</td>
+                <td className="px-6 py-4 whitespace-nowrap">{box.sent || 0}</td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  {(box.sent === 0 && box.empty === 0 && box.inStock === 0) &&   (
+                  {box.sent === 0 && (
                     <button className="mr-2" onClick={() => deleteBox(box.id)}>
                       <Trash className="w-4 h-4 cursor-pointer" />
                     </button>

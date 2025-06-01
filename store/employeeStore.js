@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { axiosInstance } from "@/utils/axiosInstance";
+import { ShowToast } from "@/utils/toast";
 
 export const useEmployee = create((set, get) => ({
   employeeState: {
@@ -40,10 +41,10 @@ export const useEmployee = create((set, get) => ({
         employeeState: {
           ...state.employeeState,
           loadingEmployee: false,
-          error: error.message || "Failed to fetch employees",
+          error: error.response?.data?.msg || "Erreur lors de la récupération des employés.",
         },
       }));
-      console.error("Fetch employees error:", error);
+      ShowToast.error(error.response?.data?.msg || "Erreur lors de la récupération des employés.");
     }
   },
   fetchEmployee: async (cin) => {
@@ -69,13 +70,14 @@ export const useEmployee = create((set, get) => ({
         employeeState: {
           ...state.employeeState,
           loadingEmployee: false,
-          error: error.message || "Failed to fetch employee",
+          error: error.response?.data?.msg || "Erreur lors de la récupération de l'employé.",
         },
       }));
-      console.error("Fetch employee error:", error);
+      ShowToast.error(error.response?.data?.msg || "Erreur lors de la récupération de l'employé.");
     }
   },
   editEmployee: async (employeeInfo, cin) => {
+    const toastId = ShowToast.loading("Mise à jour de l'employé...");
     try {
       set((state) => ({
         employeeState: { ...state.employeeState, loadingEmployee: true, error: null },
@@ -95,19 +97,23 @@ export const useEmployee = create((set, get) => ({
             loadingEmployee: false,
           },
         }));
+        ShowToast.dismiss(toastId);
+        ShowToast.successUpdate("Employé");
       }
     } catch (error) {
       set((state) => ({
         employeeState: {
           ...state.employeeState,
           loadingEmployee: false,
-          error: error.message || "Failed to update employee",
+          error: error.response?.data?.msg || "Erreur lors de la mise à jour de l'employé.",
         },
       }));
-      console.error("Edit employee error:", error);
+      ShowToast.dismiss(toastId);
+      ShowToast.error(error.response?.data?.msg || "Erreur lors de la mise à jour de l'employé.");
     }
   },
   createEmployee: async (employeeInfo) => {
+    const toastId = ShowToast.loading("Ajout d'un employé...");
     try {
       set((state) => ({
         employeeState: { ...state.employeeState, loadingEmployee: true, error: null },
@@ -118,16 +124,26 @@ export const useEmployee = create((set, get) => ({
           get().employeeState.pagination.currentPage,
           get().employeeState.pagination.pageSize
         );
+        set((state) => ({
+          employeeState: {
+            ...state.employeeState,
+            loadingEmployee: false,
+          },
+        }));
+        ShowToast.dismiss(toastId);
+        ShowToast.successAdd("Employé");
       }
     } catch (error) {
       set((state) => ({
         employeeState: {
           ...state.employeeState,
           loadingEmployee: false,
-          error: error.message || "Failed to create employee",
+          error: error.response?.data?.msg || "Erreur lors de la création de l'employé.",
         },
       }));
-      console.error("Create employee error:", error);
+      ShowToast.dismiss(toastId);
+      ShowToast.error(error.response?.data?.msg || "Erreur lors de la création de l'employé.");
+      throw error; // Propagate error to the UI
     }
   },
   nextPage: async () => {
@@ -145,7 +161,7 @@ export const useEmployee = create((set, get) => ({
         await get().fetchAllEmployees(nextPage, get().employeeState.pagination.pageSize);
       }
     } catch (error) {
-      console.error("Next page error:", error);
+      ShowToast.error("Erreur lors du changement de page.");
     }
   },
 }));

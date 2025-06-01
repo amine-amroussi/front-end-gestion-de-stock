@@ -1,3 +1,4 @@
+"use client";
 import {
   Sheet,
   SheetContent,
@@ -5,13 +6,14 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 } from "@/components/ui/sheet";
 import { Label } from "@radix-ui/react-label";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { useEffect, useState } from "react";
+import { useProduct } from "@/store/productStore";
 import { useBox } from "@/store/boxStore";
+import { axiosInstance } from "@/utils/axiosInstance";
 import {
   Select,
   SelectContent,
@@ -19,8 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useProduct } from "@/store/productStore";
-import { axiosInstance } from "@/utils/axiosInstance";
+import { ShowToast } from "@/utils/toast";
 
 const EditProductSheet = ({ open, setOpen, productId }) => {
   const editProduct = useProduct((state) => state.editProduct);
@@ -29,52 +30,81 @@ const EditProductSheet = ({ open, setOpen, productId }) => {
 
   useEffect(() => {
     fetchAllBoxes();
-
     const getProduct = async () => {
       try {
         const response = await axiosInstance.get(`/product/${productId}`);
         if (response.status === 200) {
           const data = await response.data;
-          console.log(data);
-          setProductInfo(data.data.product);
+          setProductInfo({
+            designation: data.data.product.designation,
+            genre: data.data.product.genre,
+            priceUnite: data.data.product.priceUnite || 0,
+            capacityByBox: data.data.product.capacityByBox || 0,
+            box: data.data.product.box ? data.data.product.box.toString() : "",
+          });
         }
       } catch (error) {
-        console.log(error);
+        ShowToast.error(error.response?.data?.msg || "Erreur lors de la récupération du produit.");
       }
     };
-    getProduct();
-  }, [productId]);
+    if (open && productId) {
+      getProduct();
+    }
+  }, [open, productId, fetchAllBoxes]);
 
   const [productInfo, setProductInfo] = useState({
     designation: "",
     genre: "",
     priceUnite: 0,
-    box: "", // Initialize as empty string or a valid box.id
     capacityByBox: 0,
+    box: "",
   });
 
   const handleClick = (e) => {
     e.preventDefault();
+
+    // Client-side validation
+    if (!productInfo.designation) {
+      ShowToast.errorValidation("Designation");
+      return;
+    }
+    if (!productInfo.genre) {
+      ShowToast.errorValidation("Genre");
+      return;
+    }
+    if (productInfo.priceUnite < 0 || isNaN(Number(productInfo.priceUnite))) {
+      ShowToast.errorValidation("Prix unitaire");
+      return;
+    }
+    if (productInfo.capacityByBox < 0 || isNaN(Number(productInfo.capacityByBox))) {
+      ShowToast.errorValidation("Capacité par crate");
+      return;
+    }
+    if (!productInfo.box) {
+      ShowToast.errorValidation("Crate");
+      return;
+    }
+
     editProduct(productInfo, productId);
     setOpen(false);
     setProductInfo({
       designation: "",
       genre: "",
       priceUnite: 0,
-      box: "",
       capacityByBox: 0,
+      box: "",
     });
   };
 
   const handleChange = (e) => {
-    setProductInfo({
-      ...productInfo,
-      [e.target.name]: e.target.value,
-    });
+    const { name, value } = e.target;
+    setProductInfo((prev) => ({
+      ...prev,
+      [name]: name === "priceUnite" || name === "capacityByBox" ? Number(value) : value,
+    }));
   };
 
   const changeBox = (value) => {
-    console.log("Selected box:", value); // Debug to confirm value
     setProductInfo({ ...productInfo, box: value });
   };
 
@@ -84,8 +114,7 @@ const EditProductSheet = ({ open, setOpen, productId }) => {
         <SheetHeader>
           <SheetTitle>Modifier Un Produit</SheetTitle>
           <SheetDescription>
-            La Vous peuvez modifier un produit en changement des informations du
-            formulaire.
+            La Vous pouvez modifier un produit en changeant les informations du formulaire.
           </SheetDescription>
         </SheetHeader>
         <form className="text-sm" onSubmit={handleClick}>
@@ -94,7 +123,7 @@ const EditProductSheet = ({ open, setOpen, productId }) => {
             <Input
               id="Designation"
               type="text"
-              placeholder="Designation de crate"
+              placeholder="Designation de produit"
               name="designation"
               value={productInfo.designation}
               onChange={handleChange}
@@ -105,30 +134,32 @@ const EditProductSheet = ({ open, setOpen, productId }) => {
             <Input
               id="Genre"
               type="text"
-              placeholder="Genre de crate"
+              placeholder="Genre de produit"
               name="genre"
               value={productInfo.genre}
               onChange={handleChange}
             />
           </div>
           <div className="my-2 flex flex-col gap-2 px-4">
-            <Label htmlFor="prixUnite">Le Prix Unitaire</Label>
+            <Label htmlFor="priceUnite">Prix Unitaire</Label>
             <Input
-              id="prixUnite"
+              id="priceUnite"
               type="number"
               name="priceUnite"
               value={productInfo.priceUnite}
               onChange={handleChange}
+              step="0.01" // Allow decimals
             />
           </div>
           <div className="my-2 flex flex-col gap-2 px-4">
-            <Label htmlFor="capacityByBox">La Capacite par Crate</Label>
+            <Label htmlFor="capacityByBox">Capacité par Crate</Label>
             <Input
               id="capacityByBox"
               type="number"
               name="capacityByBox"
               value={productInfo.capacityByBox}
               onChange={handleChange}
+              step="1" // Integer only
             />
           </div>
           <div className="my-2 flex flex-col gap-2 px-4">
@@ -139,7 +170,7 @@ const EditProductSheet = ({ open, setOpen, productId }) => {
               name="box"
             >
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Choisir un crate" value={productInfo.box} />
+                <SelectValue placeholder="Choisir un crate" />
               </SelectTrigger>
               <SelectContent>
                 {boxes.length > 0 ? (

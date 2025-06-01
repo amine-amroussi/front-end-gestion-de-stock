@@ -12,48 +12,57 @@ export const useTrip = create((set, get) => ({
       totalItems: 0,
       totalPages: 0,
       currentPage: 1,
-      pageSize: 10,
-    },
+      pageSize: 10
+    }
   },
-  fetchAllTrips: async (page = 1, limit = 10) => {
-  try {
-    set((state) => ({
-      tripState: { ...state.tripState, loadingTrip: true, error: null },
-    }));
-
-    const response = await axiosInstance.get(`/trip`, {
-      params: { page, limit },
-    });
-    console.log("fetchAllTrips response:", response.data);
-
-    if (response.status === 200) {
-      const { trips, totalItems, totalPages, currentPage } = response.data;
+ fetchAllTrips: async (page = 1, params = {}) => {
+    try {
       set((state) => ({
-        tripState: {
-          ...state.tripState,
-          trips,
-          pagination: {
-            totalItems,
-            totalPages,
-            currentPage,
-            pageSize: limit,
-          },
-        },
+        tripState: { ...state.tripState, loadingTrip: true, error: null }
+      }));
+
+      const response = await axiosInstance.get(`/trip`, {
+        params: {
+          page,
+          limit: params.limit || 10,
+          startDate: params.startDate,
+          endDate: params.endDate,
+          employee: params.employee,
+          truck: params.truck,
+          status: params.status,
+          search: params.search,
+          sortBy: params.sortBy || 'date',
+          sortOrder: params.sortOrder || 'DESC'
+        }
+      });
+
+      if (response.status === 200) {
+        const { trips, totalItems, totalPages, currentPage } = response.data;
+        set((state) => ({
+          tripState: {
+            ...state.tripState,
+            trips,
+            pagination: {
+              totalItems,
+              totalPages,
+              currentPage,
+              pageSize: params.limit || 10
+            }
+          }
+        }));
+      }
+    } catch (error) {
+      const errorMessage = error.response?.data?.message || "Erreur lors de la récupération des tournées.";
+      set((state) => ({
+        tripState: { ...state.tripState, loadingTrip: false, error: errorMessage }
+      }));
+      toast.error(errorMessage);
+    } finally {
+      set((state) => ({
+        tripState: { ...state.tripState, loadingTrip: false }
       }));
     }
-  } catch (error) {
-    const errorMessage = error.response?.data?.message || "Erreur lors de la récupération des tournées.";
-    console.error("fetchAllTrips error:", error.response?.data || error);
-    set((state) => ({
-      tripState: { ...state.tripState, loadingTrip: false, error: errorMessage },
-    }));
-    toast.error(errorMessage);
-  } finally {
-    set((state) => ({
-      tripState: { ...state.tripState, loadingTrip: false },
-    }));
-  }
-},
+  },
   fetchActiveTrips: async () => {
     try {
       set((state) => ({
@@ -224,18 +233,19 @@ finishTrip: async (tripId, tripData) => {
         set((state) => ({
           tripState: {
             ...state.tripState,
-            pagination: { ...state.tripState.pagination, currentPage: nextPage },
-          },
+            pagination: { ...state.tripState.pagination, currentPage: nextPage }
+          }
         }));
-        await get().fetchAllTrips(nextPage, get().tripState.pagination.pageSize);
+        await get().fetchAllTrips(nextPage, {
+          limit: get().tripState.pagination.pageSize
+        });
       }
     } catch (error) {
       const errorMessage = error.response?.data?.message || "Erreur lors du changement de page.";
-      console.error("nextPage error:", error.response?.data || error);
       set((state) => ({
-        tripState: { ...state.tripState, error: errorMessage },
+        tripState: { ...state.tripState, error: errorMessage }
       }));
       toast.error(errorMessage);
     }
-  },
+  }
 }));

@@ -5,13 +5,13 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 } from "@/components/ui/sheet";
 import { Label } from "@radix-ui/react-label";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { useState } from "react";
 import { useBox } from "@/store/boxStore";
+import { ShowToast } from "@/utils/toast";
 
 const AddBoxSheet = ({ open, setOpen }) => {
   const createBox = useBox((state) => state.createBox);
@@ -19,36 +19,39 @@ const AddBoxSheet = ({ open, setOpen }) => {
   const [boxInfo, setBoxInfo] = useState({
     designation: "",
     type: "",
-    inStock: 0,
-    empty: 0,
-    capacity: 0
   });
-
 
   const handleClick = (e) => {
     e.preventDefault();
+
+    // Validation côté client
+    if (!boxInfo.designation) {
+      ShowToast.errorValidation("Designation");
+      return;
+    }
+    if (!boxInfo.type) {
+      ShowToast.errorValidation("Type");
+      return;
+    }
+
     createBox(boxInfo);
     setOpen(false);
-    // clear the form
+    // Réinitialiser le formulaire
     setBoxInfo({
       designation: "",
       type: "",
-      inStock: 0,
-      empty: 0,
-      capacity:0
-    })
+    });
   };
 
-  const handleChange = e => {
+  const handleChange = (e) => {
     setBoxInfo({
       ...boxInfo,
-      [e.target.name]: e.target.value
-    })
-}
+      [e.target.name]: e.target.value,
+    });
+  };
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      {/* <SheetTrigger>Open</SheetTrigger> */}
       <SheetContent>
         <SheetHeader>
           <SheetTitle>Ajouter Un Crate</SheetTitle>
@@ -56,13 +59,13 @@ const AddBoxSheet = ({ open, setOpen }) => {
             La Vous peuvez ajouter un crate en remplissant le formulaire.
           </SheetDescription>
         </SheetHeader>
-        <form className=" text-sm" onSubmit={handleClick}>
+        <form className="text-sm" onSubmit={handleClick}>
           <div className="my-2 flex flex-col gap-2 px-4">
             <Label htmlFor="Designation">Designation</Label>
             <Input
               id="Designation"
               type="text"
-              palaceholder="Designation de crate"
+              placeholder="Designation de crate"
               name="designation"
               value={boxInfo.designation}
               onChange={handleChange}
@@ -73,44 +76,14 @@ const AddBoxSheet = ({ open, setOpen }) => {
             <Input
               id="Type"
               type="text"
-              palaceholder="Type de crate"
+              placeholder="Type de crate"
               name="type"
               value={boxInfo.type}
               onChange={handleChange}
             />
           </div>
-          {/* <div className="my-2 flex flex-col gap-2 px-4">
-            <Label htmlFor="qqtInStock">Quantite En Stock</Label>
-            <Input
-              id="qqtInStock"
-              type="number"
-              name="inStock"
-              value={boxInfo.inStock}
-              onChange={handleChange}
-            />
-          </div>
-          <div className="my-2 flex flex-col gap-2 px-4">
-            <Label htmlFor="qqtEmpty">Quantite Vide</Label>
-            <Input
-              id="qttEmpty"
-              type="number"
-              name="empty"
-              value={boxInfo.empty}
-              onChange={handleChange}
-            />
-          </div> */}
-          <div className="my-2 flex flex-col gap-2 px-4">
-            <Label htmlFor="qqtEmpty">La capacity de crate</Label>
-            <Input
-              id="capacity"
-              type="number"
-              name="capacity"
-              value={boxInfo.capacity}
-              onChange={handleChange}
-            />
-          </div>
           <SheetFooter>
-            <Button>Ajouter</Button>
+            <Button type="submit">Ajouter</Button>
           </SheetFooter>
         </form>
       </SheetContent>

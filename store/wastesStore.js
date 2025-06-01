@@ -1,8 +1,8 @@
 import { create } from "zustand";
 import { axiosInstance } from "@/utils/axiosInstance";
-import { toast } from "sonner";
+import { ShowToast } from "@/utils/toast"; // Use ShowToast instead of sonner toast
 
-export const useWastes  = create((set, get) => ({
+export const useWastes = create((set, get) => ({
   wasteState: {
     wastes: [],
     selectedWastes: [],
@@ -17,6 +17,7 @@ export const useWastes  = create((set, get) => ({
     },
   },
   fetchAllWastes: async (page = 1, limit = 10) => {
+    const toastId = ShowToast.loading("Chargement des déchets...");
     try {
       set((state) => ({
         wasteState: { ...state.wasteState, loadingWaste: true, error: null },
@@ -25,11 +26,9 @@ export const useWastes  = create((set, get) => ({
       const response = await axiosInstance.get(`/waste`, {
         params: { page, limit },
       });
-      
 
       if (response.status === 200) {
         const data = response.data;
-        
         set((state) => ({
           wasteState: {
             ...state.wasteState,
@@ -40,11 +39,14 @@ export const useWastes  = create((set, get) => ({
               currentPage: page,
               pageSize: limit,
             },
+            loadingWaste: false,
           },
         }));
+        ShowToast.dismiss(toastId);
+        ShowToast.successAdd("Déchets chargés");
       }
     } catch (error) {
-      const errorMessage = error.response?.data?.message || error.message || "Erreur lors de la récupération des déchets.";
+      const errorMessage = error.response?.data?.message || "Échec du chargement des déchets";
       set((state) => ({
         wasteState: {
           ...state.wasteState,
@@ -52,15 +54,13 @@ export const useWastes  = create((set, get) => ({
           error: errorMessage,
         },
       }));
-      toast.error(errorMessage);
+      ShowToast.dismiss(toastId);
+      ShowToast.error(errorMessage);
       console.error("Fetch wastes error:", error);
-    } finally {
-      set((state) => ({
-        wasteState: { ...state.wasteState, loadingWaste: false },
-      }));
     }
   },
   nextPage: async () => {
+    const toastId = ShowToast.loading("Chargement de la page suivante...");
     try {
       const currentPage = get().wasteState.pagination.currentPage;
       const totalPages = get().wasteState.pagination.totalPages;
@@ -73,46 +73,67 @@ export const useWastes  = create((set, get) => ({
           },
         }));
         await get().fetchAllWastes(nextPage, get().wasteState.pagination.pageSize);
+        ShowToast.dismiss(toastId);
+        ShowToast.successAdd("Page suivante chargée");
+      } else {
+        ShowToast.dismiss(toastId);
+        ShowToast.error("Aucune page suivante disponible");
       }
     } catch (error) {
-      const errorMessage = error.response?.data?.message || error.message || "Erreur lors du changement de page.";
+      const errorMessage = error.response?.data?.message || "Échec du chargement de la page suivante";
       set((state) => ({
         wasteState: {
           ...state.wasteState,
           error: errorMessage,
         },
       }));
-      toast.error(errorMessage);
+      ShowToast.dismiss(toastId);
+      ShowToast.error(errorMessage);
       console.error("Next page error:", error);
     }
   },
   createWaste: async (wasteInfo) => {
-    try {
-      set((state) => ({
-        wasteState: { ...state.wasteState, loadingWaste: true, error: null },
-      }));
-      const response = await axiosInstance.post("/waste", wasteInfo);
-      if (response.status === 201 || response.status === 200) {
-        await get().fetchAllWastes(get().wasteState.pagination.currentPage, get().wasteState.pagination.pageSize);
-      }
-    } catch (error) {
-      const errorMessage = error.response?.data?.message || error.message || "Erreur lors de la création du déchet.";
+  const toastId = ShowToast.loading("Ajout du déchet...");
+  try {
+    set((state) => ({
+      wasteState: { ...state.wasteState, loadingWaste: true, error: null },
+    }));
+    // Validate qtt is a number
+    const validatedWasteInfo = {
+      ...wasteInfo,
+      qtt: parseFloat(wasteInfo.qtt),
+    };
+    if (isNaN(validatedWasteInfo.qtt) || validatedWasteInfo.qtt <= 0) {
+      throw new Error("La quantité doit être un nombre positif");
+    }
+    const response = await axiosInstance.post("/waste", validatedWasteInfo);
+    if (response.status === 201 || response.status === 200) {
+      await get().fetchAllWastes(get().wasteState.pagination.currentPage, get().wasteState.pagination.pageSize);
       set((state) => ({
         wasteState: {
           ...state.wasteState,
           loadingWaste: false,
-          error: errorMessage,
         },
       }));
-      toast.error(errorMessage);
-      console.error("Create waste error:", error);
-    } finally {
-      set((state) => ({
-        wasteState: { ...state.wasteState, loadingWaste: false },
-      }));
+      ShowToast.dismiss(toastId);
+      ShowToast.successAdd("Déchet");
     }
-  },
+  } catch (error) {
+    const errorMessage = error.response?.data?.message || error.message || "Échec de la création du déchet";
+    set((state) => ({
+      wasteState: {
+        ...state.wasteState,
+        loadingWaste: false,
+        error: errorMessage,
+      },
+    }));
+    ShowToast.dismiss(toastId);
+    ShowToast.error(errorMessage);
+    console.error("Create waste error:", error);
+  }
+},
   getWaste: async (id) => {
+    const toastId = ShowToast.loading("Chargement du déchet...");
     try {
       set((state) => ({
         wasteState: { ...state.wasteState, loadingWaste: true, error: null },
@@ -127,9 +148,11 @@ export const useWastes  = create((set, get) => ({
             loadingWaste: false,
           },
         }));
+        ShowToast.dismiss(toastId);
+        ShowToast.successAdd("Déchet chargé");
       }
     } catch (error) {
-      const errorMessage = error.response?.data?.message || error.message || "Erreur lors de la récupération du déchet.";
+      const errorMessage = error.response?.data?.message || "Échec du chargement du déchet";
       set((state) => ({
         wasteState: {
           ...state.wasteState,
@@ -137,11 +160,13 @@ export const useWastes  = create((set, get) => ({
           error: errorMessage,
         },
       }));
-      toast.error(errorMessage);
+      ShowToast.dismiss(toastId);
+      ShowToast.error(errorMessage);
       console.error("Get waste error:", error);
     }
   },
   editWaste: async (wasteInfo, id) => {
+    const toastId = ShowToast.loading("Modification du déchet...");
     try {
       set((state) => ({
         wasteState: { ...state.wasteState, loadingWaste: true, error: null },
@@ -149,9 +174,17 @@ export const useWastes  = create((set, get) => ({
       const response = await axiosInstance.patch(`/waste/${id}`, wasteInfo);
       if (response.status === 200) {
         await get().fetchAllWastes(get().wasteState.pagination.currentPage, get().wasteState.pagination.pageSize);
+        set((state) => ({
+          wasteState: {
+            ...state.wasteState,
+            loadingWaste: false,
+          },
+        }));
+        ShowToast.dismiss(toastId);
+        ShowToast.successUpdate("Déchet");
       }
     } catch (error) {
-      const errorMessage = error.response?.data?.message || error.message || "Erreur lors de la modification du déchet.";
+      const errorMessage = error.response?.data?.message || "Échec de la modification du déchet";
       set((state) => ({
         wasteState: {
           ...state.wasteState,
@@ -159,7 +192,8 @@ export const useWastes  = create((set, get) => ({
           error: errorMessage,
         },
       }));
-      toast.error(errorMessage);
+      ShowToast.dismiss(toastId);
+      ShowToast.error(errorMessage);
       console.error("Edit waste error:", error);
     }
   },

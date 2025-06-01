@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ShowToast } from "@/utils/toast";
 
 const EditEmployeeSheet = ({ open, setOpen, cin, onEmployeeEdited }) => {
   const { fetchEmployee, editEmployee, employeeState: { selectedEmployee, loadingEmployee, error } } = useEmployee();
@@ -28,7 +29,7 @@ const EditEmployeeSheet = ({ open, setOpen, cin, onEmployeeEdited }) => {
     name: "",
     address: "",
     tel: "",
-    salary_fix: 0,
+    salary_fix: "",
   });
 
   useEffect(() => {
@@ -45,39 +46,64 @@ const EditEmployeeSheet = ({ open, setOpen, cin, onEmployeeEdited }) => {
         name: selectedEmployee.name || "",
         address: selectedEmployee.address || "",
         tel: selectedEmployee.tel || "",
-        salary_fix: selectedEmployee.salary_fix || 0,
+        salary_fix: selectedEmployee.salary_fix || "",
       });
     }
   }, [selectedEmployee]);
 
   const handleClick = async (e) => {
     e.preventDefault();
-    try {
-      await editEmployee(employeeInfo, cin);
-      setOpen(false);
-      setEmployeeInfo({
-        cin: "",
-        role: "",
-        name: "",
-        address: "",
-        tel: "",
-        salary_fix: 0,
-      });
-      if (onEmployeeEdited) onEmployeeEdited();
-    } catch (err) {
-      console.error("Failed to edit employee:", err);
+
+    // Client-side validation (similar to AddEmployeeSheet)
+    if (!employeeInfo.name || employeeInfo.name.trim().length < 3) {
+      ShowToast.errorValidation("Nom", "Le nom doit contenir au moins 3 caractères.");
+      return;
     }
+    if (!employeeInfo.tel || !/^\+?[\d\s-]{9,}$/.test(employeeInfo.tel.trim())) {
+      ShowToast.errorValidation("Téléphone", "Le numéro de téléphone doit contenir au moins 9 chiffres.");
+      return;
+    }
+    if (!employeeInfo.address || employeeInfo.address.trim().length < 5) {
+      ShowToast.errorValidation("Adresse", "L'adresse doit contenir au moins 5 caractères.");
+      return;
+    }
+    const salaryFixValue = Number(employeeInfo.salary_fix);
+    if (
+      employeeInfo.salary_fix === "" ||
+      isNaN(salaryFixValue) ||
+      salaryFixValue < 0 ||
+      salaryFixValue > 999999.99
+    ) {
+      ShowToast.errorValidation("Salaire Fixe", "Le salaire doit être un nombre positif inférieur à 1 000 000.");
+      return;
+    }
+    if (!employeeInfo.role) {
+      ShowToast.errorValidation("Rôle", "Veuillez sélectionner un rôle.");
+      return;
+    }
+
+    await editEmployee(employeeInfo, cin);
+    setOpen(false);
+    setEmployeeInfo({
+      cin: "",
+      role: "",
+      name: "",
+      address: "",
+      tel: "",
+      salary_fix: "",
+    });
+    if (onEmployeeEdited) onEmployeeEdited();
   };
 
   const handleChange = (e) => {
-    setEmployeeInfo({
-      ...employeeInfo,
-      [e.target.name]: e.target.value,
-    });
+    const { name, value } = e.target;
+    setEmployeeInfo((prev) => ({
+      ...prev,
+      [name]: name === "salary_fix" ? (value === "" ? "" : Number(value)) : value,
+    }));
   };
 
   const changeRole = (value) => {
-    console.log("Selected role:", value);
     setEmployeeInfo({ ...employeeInfo, role: value });
   };
 
@@ -93,7 +119,9 @@ const EditEmployeeSheet = ({ open, setOpen, cin, onEmployeeEdited }) => {
         {error && <p className="text-red-500 px-4">{error}</p>}
         <form className="text-sm flex flex-col gap-4" onSubmit={handleClick}>
           <div className="flex flex-col gap-2 px-4">
-            <Label htmlFor="cin">CIN</Label>
+            <Label htmlFor="cin">
+              CIN <span className="text-red-500">*</span>
+            </Label>
             <Input
               id="cin"
               type="text"
@@ -105,24 +133,31 @@ const EditEmployeeSheet = ({ open, setOpen, cin, onEmployeeEdited }) => {
             />
           </div>
           <div className="flex flex-col gap-2 px-4">
-            <Label htmlFor="name">Nom</Label>
+            <Label htmlFor="name">
+              Nom <span className="text-red-500">*</span>
+            </Label>
             <Input
               id="name"
               type="text"
-              placeholder="Nom de l'employé"
+              placeholder="Nom de l'employé (min 3 caractères)"
               name="name"
               value={employeeInfo.name}
               onChange={handleChange}
               disabled={loadingEmployee}
+              required
+              minLength={3}
             />
           </div>
           <div className="flex flex-col gap-2 px-4">
-            <Label htmlFor="role">Rôle</Label>
+            <Label htmlFor="role">
+              Rôle <span className="text-red-500">*</span>
+            </Label>
             <Select
               value={employeeInfo.role}
               onValueChange={changeRole}
               name="role"
               disabled={loadingEmployee}
+              required
             >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Choisir un rôle" />
@@ -135,39 +170,53 @@ const EditEmployeeSheet = ({ open, setOpen, cin, onEmployeeEdited }) => {
             </Select>
           </div>
           <div className="flex flex-col gap-2 px-4">
-            <Label htmlFor="address">Adresse</Label>
+            <Label htmlFor="address">
+              Adresse <span className="text-red-500">*</span>
+            </Label>
             <Input
               id="address"
               type="text"
-              placeholder="Adresse"
+              placeholder="Adresse (min 5 caractères)"
               name="address"
               value={employeeInfo.address}
               onChange={handleChange}
               disabled={loadingEmployee}
+              required
+              minLength={5}
             />
           </div>
           <div className="flex flex-col gap-2 px-4">
-            <Label htmlFor="tel">Téléphone</Label>
+            <Label htmlFor="tel">
+              Téléphone <span className="text-red-500">*</span>
+            </Label>
             <Input
               id="tel"
-              type="text"
-              placeholder="Numéro de téléphone"
+              type="tel"
+              placeholder="Numéro de téléphone (min 9 chiffres)"
               name="tel"
               value={employeeInfo.tel}
               onChange={handleChange}
               disabled={loadingEmployee}
+              required
+              pattern="\+?[\d\s-]{9,}"
             />
           </div>
           <div className="flex flex-col gap-2 px-4">
-            <Label htmlFor="salary_fix">Salaire Fixe</Label>
+            <Label htmlFor="salary_fix">
+              Salaire Fixe <span className="text-red-500">*</span>
+            </Label>
             <Input
               id="salary_fix"
               type="number"
-              placeholder="Salaire fixe"
+              placeholder="Salaire fixe (max 999999.99)"
               name="salary_fix"
               value={employeeInfo.salary_fix}
               onChange={handleChange}
               disabled={loadingEmployee}
+              required
+              step="0.01"
+              min="0"
+              max="999999.99"
             />
           </div>
           <SheetFooter className="px-4">

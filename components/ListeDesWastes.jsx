@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useWastes } from "@/store/wastesStore";
 import { useProduct } from "@/store/productStore";
 import { Button } from "@/components/ui/button";
+import { ShowToast } from "@/utils/toast"; // Import ShowToast
 
 const ListeDesWastes = () => {
   const {
@@ -17,6 +18,12 @@ const ListeDesWastes = () => {
     fetchAllWastes(pagination.currentPage, pagination.pageSize);
     fetchAllProducts(); // Fetch products to ensure designations are available
   }, [fetchAllWastes, fetchAllProducts, pagination.currentPage, pagination.pageSize]);
+
+  useEffect(() => {
+    if (error) {
+      ShowToast.error(error); // Show error via toast
+    }
+  }, [error]);
 
   const handlePageChange = (newPage) => {
     if (newPage >= 1 && newPage <= pagination.totalPages) {
@@ -53,10 +60,7 @@ const ListeDesWastes = () => {
 
   return (
     <div className="container mx-auto">
-      
-
       {loadingWaste && <p className="text-center">Chargement des déchets...</p>}
-      {error && <p className="text-red-500 text-center">{error}</p>}
       {!loadingWaste && !error && wastes.length === 0 && (
         <p className="text-center">Aucun déchet trouvé.</p>
       )}

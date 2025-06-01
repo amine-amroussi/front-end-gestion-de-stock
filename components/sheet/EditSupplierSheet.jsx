@@ -12,6 +12,7 @@ import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { useEffect, useState } from "react";
 import { useSupplier } from "@/store/supplierStore";
+import { ShowToast } from "@/utils/toast";
 
 const EditSupplierSheet = ({ open, setOpen, id, onSupplierEdited }) => {
   const {
@@ -44,18 +45,29 @@ const EditSupplierSheet = ({ open, setOpen, id, onSupplierEdited }) => {
 
   const handleClick = async (e) => {
     e.preventDefault();
-    try {
-      await editSupplier(supplierInfo, id);
-      setOpen(false);
-      setSupplierInfo({
-        name: "",
-        tel: "",
-        address: "",
-      });
-      if (onSupplierEdited) onSupplierEdited();
-    } catch (err) {
-      console.error("Failed to edit supplier:", err);
+
+    // Client-side validation
+    if (!supplierInfo.name || supplierInfo.name.trim().length < 3) {
+      ShowToast.errorValidation("Nom", "Le nom doit contenir au moins 3 caractères.");
+      return;
     }
+    if (!supplierInfo.tel || !/^\+?[\d\s-]{9,}$/.test(supplierInfo.tel.trim())) {
+      ShowToast.errorValidation("Téléphone", "Le numéro de téléphone doit contenir au moins 9 chiffres.");
+      return;
+    }
+    if (!supplierInfo.address || supplierInfo.address.trim().length < 5) {
+      ShowToast.errorValidation("Adresse", "L'adresse doit contenir au moins 5 caractères.");
+      return;
+    }
+
+    await editSupplier(supplierInfo, id);
+    setOpen(false);
+    setSupplierInfo({
+      name: "",
+      tel: "",
+      address: "",
+    });
+    if (onSupplierEdited) onSupplierEdited();
   };
 
   const handleChange = (e) => {
@@ -77,39 +89,51 @@ const EditSupplierSheet = ({ open, setOpen, id, onSupplierEdited }) => {
         {error && <p className="text-red-500 px-4">{error}</p>}
         <form className="text-sm flex flex-col gap-4" onSubmit={handleClick}>
           <div className="flex flex-col gap-2 px-4">
-            <Label htmlFor="name">Nom</Label>
+            <Label htmlFor="name">
+              Nom <span className="text-red-500">*</span>
+            </Label>
             <Input
               id="name"
               type="text"
-              placeholder="Nom du fournisseur"
+              placeholder="Nom du fournisseur (min 3 caractères)"
               name="name"
               value={supplierInfo.name}
               onChange={handleChange}
               disabled={loadingSupplier}
+              required
+              minLength={3}
             />
           </div>
           <div className="flex flex-col gap-2 px-4">
-            <Label htmlFor="tel">Téléphone</Label>
+            <Label htmlFor="tel">
+              Téléphone <span className="text-red-500">*</span>
+            </Label>
             <Input
               id="tel"
-              type="text"
-              placeholder="Numéro de téléphone"
+              type="tel"
+              placeholder="Numéro de téléphone (min 9 chiffres)"
               name="tel"
               value={supplierInfo.tel}
               onChange={handleChange}
               disabled={loadingSupplier}
+              required
+              pattern="\+?[\d\s-]{9,}"
             />
           </div>
           <div className="flex flex-col gap-2 px-4">
-            <Label htmlFor="address">Adresse</Label>
+            <Label htmlFor="address">
+              Adresse <span className="text-red-500">*</span>
+            </Label>
             <Input
               id="address"
               type="text"
-              placeholder="Adresse"
+              placeholder="Adresse (min 5 caractères)"
               name="address"
               value={supplierInfo.address}
               onChange={handleChange}
               disabled={loadingSupplier}
+              required
+              minLength={5}
             />
           </div>
           <SheetFooter className="px-4">

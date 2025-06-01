@@ -1,14 +1,13 @@
-
 import { create } from "zustand";
 import { axiosInstance } from "@/utils/axiosInstance";
+import { ShowToast } from "@/utils/toast";
 
 export const useProduct = create((set, get) => ({
   productState: {
     products: [],
     selectedProducts: [],
     selectedProduct: "",
-    loadingProduct: false, // Fixed typo: lodingProduct -> loadingProduct
-    error: null, // Added to store errors
+    loadingProduct: false,
     pagination: {
       totalItems: 0,
       totalPages: 0,
@@ -19,7 +18,7 @@ export const useProduct = create((set, get) => ({
   fetchAllProducts: async (page = 1, limit = 10) => {
     try {
       set((state) => ({
-        productState: { ...state.productState, loadingProduct: true, error: null },
+        productState: { ...state.productState, loadingProduct: true },
       }));
 
       const response = await axiosInstance.get(`/product`, {
@@ -27,7 +26,7 @@ export const useProduct = create((set, get) => ({
       });
 
       if (response.status === 200) {
-        const data = response.data; // Removed unnecessary await
+        const data = response.data;
         set((state) => ({
           productState: {
             ...state.productState,
@@ -41,10 +40,9 @@ export const useProduct = create((set, get) => ({
         productState: {
           ...state.productState,
           loadingProduct: false,
-          error: error.message || "Failed to fetch products",
         },
       }));
-      console.error("Fetch products error:", error);
+      ShowToast.error(error.response?.data?.msg || "Erreur lors de la récupération des produits.");
     } finally {
       set((state) => ({
         productState: { ...state.productState, loadingProduct: false },
@@ -66,34 +64,41 @@ export const useProduct = create((set, get) => ({
         await get().fetchAllProducts(nextPage, get().productState.pagination.pageSize);
       }
     } catch (error) {
-      console.error("Next page error:", error);
+      ShowToast.error("Erreur lors du changement de page.");
     }
   },
   createProduct: async (productInfo) => {
+    const toastId = ShowToast.loading("Ajout d'un produit...");
     try {
       set((state) => ({
-        productState: { ...state.productState, loadingProduct: true, error: null },
+        productState: { ...state.productState, loadingProduct: true },
       }));
-      const response = await axiosInstance.post("/product", productInfo);
+      const response = await axiosInstance.post("/product", {
+        designation: productInfo.designation,
+        genre: productInfo.genre,
+        priceUnite: Number(productInfo.priceUnite),
+        capacityByBox: Number(productInfo.capacityByBox),
+        box: productInfo.box,
+      });
       if (response.status === 201) {
-        const data = response.data; // Removed unnecessary await
+        const data = response.data;
         await get().fetchAllProducts(get().productState.pagination.currentPage, get().productState.pagination.pageSize);
+        ShowToast.dismiss(toastId);
+        ShowToast.successAdd(`Le produit`);
       }
     } catch (error) {
+      ShowToast.dismiss(toastId);
+      ShowToast.error(error.response?.data?.msg || "Erreur lors de la création du produit.");
+    } finally {
       set((state) => ({
-        productState: {
-          ...state.productState,
-          loadingProduct: false,
-          error: error.message || "Failed to create product",
-        },
+        productState: { ...state.productState, loadingProduct: false },
       }));
-      console.error("Create product error:", error);
     }
   },
   getProduct: async (id) => {
     try {
       set((state) => ({
-        productState: { ...state.productState, loadingProduct: true, error: null },
+        productState: { ...state.productState, loadingProduct: true },
       }));
       const response = await axiosInstance.get(`/product/${id}`);
       if (response.status === 200) {
@@ -101,41 +106,45 @@ export const useProduct = create((set, get) => ({
         set((state) => ({
           productState: {
             ...state.productState,
-            selectedProduct: data.product,
+            selectedProduct: data.data.product,
             loadingProduct: false,
           },
         }));
       }
     } catch (error) {
+      ShowToast.error(error.response?.data?.msg || "Erreur lors de la récupération du produit.");
+    } finally {
       set((state) => ({
-        productState: {
-          ...state.productState,
-          loadingProduct: false,
-          error: error.message || "Failed to fetch product",
-        },
+        productState: { ...state.productState, loadingProduct: false },
       }));
-      console.error("Get product error:", error);
     }
   },
   editProduct: async (productInfo, id) => {
+    const toastId = ShowToast.loading("Mise à jour du produit...");
     try {
       set((state) => ({
-        productState: { ...state.productState, loadingProduct: true, error: null },
+        productState: { ...state.productState, loadingProduct: true },
       }));
-      const response = await axiosInstance.patch(`/product/${id}`, productInfo);
+      const response = await axiosInstance.patch(`/product/${id}`, {
+        designation: productInfo.designation,
+        genre: productInfo.genre,
+        priceUnite: Number(productInfo.priceUnite),
+        capacityByBox: Number(productInfo.capacityByBox),
+        box: productInfo.box,
+      });
       if (response.status === 200) {
         const data = response.data;
         await get().fetchAllProducts(get().productState.pagination.currentPage, get().productState.pagination.pageSize);
+        ShowToast.dismiss(toastId);
+        ShowToast.successUpdate(`Le produit`);
       }
     } catch (error) {
+      ShowToast.dismiss(toastId);
+      ShowToast.error(error.response?.data?.msg || "Erreur lors de la mise à jour du produit.");
+    } finally {
       set((state) => ({
-        productState: {
-          ...state.productState,
-          loadingProduct: false,
-          error: error.message || "Failed to edit product",
-        },
+        productState: { ...state.productState, loadingProduct: false },
       }));
-      console.error("Edit product error:", error);
     }
   },
 }));

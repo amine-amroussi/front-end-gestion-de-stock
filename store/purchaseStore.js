@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { axiosInstance } from "@/utils/axiosInstance";
+import { ShowToast } from "@/utils/toast"; // Import the toast utility
 
 export const usePurchase = create((set, get) => ({
   purchaseState: {
@@ -15,6 +16,7 @@ export const usePurchase = create((set, get) => ({
     },
   },
   fetchAllPurchases: async (page = 1, limit = 10) => {
+    const toastId = ShowToast.loading("Chargement des achats...");
     try {
       set((state) => ({
         purchaseState: { ...state.purchaseState, loadingPurchase: true, error: null },
@@ -34,19 +36,25 @@ export const usePurchase = create((set, get) => ({
             loadingPurchase: false,
           },
         }));
+        ShowToast.dismiss(toastId);
+        ShowToast.successAdd("Achats chargés");
       }
     } catch (error) {
+      const errorMessage = error.response?.data?.message || "Échec du chargement des achats";
       set((state) => ({
         purchaseState: {
           ...state.purchaseState,
           loadingPurchase: false,
-          error: error.response?.data?.message || "Failed to fetch purchases",
+          error: errorMessage,
         },
       }));
+      ShowToast.dismiss(toastId);
+      ShowToast.error(errorMessage);
       console.error("Fetch purchases error:", error);
     }
   },
   fetchPurchase: async (id) => {
+    const toastId = ShowToast.loading("Chargement de l'achat...");
     try {
       set((state) => ({
         purchaseState: { ...state.purchaseState, loadingPurchase: true, error: null },
@@ -63,19 +71,25 @@ export const usePurchase = create((set, get) => ({
             loadingPurchase: false,
           },
         }));
+        ShowToast.dismiss(toastId);
+        ShowToast.successAdd("Achat chargé");
       }
     } catch (error) {
+      const errorMessage = error.response?.data?.message || "Échec du chargement de l'achat";
       set((state) => ({
         purchaseState: {
           ...state.purchaseState,
           loadingPurchase: false,
-          error: error.response?.data?.message || "Failed to fetch purchase",
+          error: errorMessage,
         },
       }));
+      ShowToast.dismiss(toastId);
+      ShowToast.error(errorMessage);
       console.error("Fetch purchase error:", error);
     }
   },
   createPurchase: async (purchaseInfo) => {
+    const toastId = ShowToast.loading("Ajout de l'achat...");
     try {
       set((state) => ({
         purchaseState: { ...state.purchaseState, loadingPurchase: true, error: null },
@@ -94,19 +108,25 @@ export const usePurchase = create((set, get) => ({
             loadingPurchase: false,
           },
         }));
+        ShowToast.dismiss(toastId);
+        ShowToast.successAdd("Achat");
       }
     } catch (error) {
+      const errorMessage = error.response?.data?.message || "Échec de la création de l'achat";
       set((state) => ({
         purchaseState: {
           ...state.purchaseState,
           loadingPurchase: false,
-          error: error.response?.data?.message || "Failed to create purchase",
+          error: errorMessage,
         },
       }));
+      ShowToast.dismiss(toastId);
+      ShowToast.error(errorMessage);
       console.error("Create purchase error:", error);
     }
   },
   nextPage: async () => {
+    const toastId = ShowToast.loading("Chargement de la page suivante...");
     try {
       const currentPage = get().purchaseState.pagination.currentPage;
       const totalPages = get().purchaseState.pagination.totalPages;
@@ -119,14 +139,22 @@ export const usePurchase = create((set, get) => ({
           },
         }));
         await get().fetchAllPurchases(nextPage, get().purchaseState.pagination.pageSize);
+        ShowToast.dismiss(toastId);
+        ShowToast.successAdd("Page suivante chargée");
+      } else {
+        ShowToast.dismiss(toastId);
+        ShowToast.error("Aucune page suivante disponible");
       }
     } catch (error) {
+      const errorMessage = error.response?.data?.message || "Échec du chargement de la page suivante";
       set((state) => ({
         purchaseState: {
           ...state.purchaseState,
-          error: error.response?.data?.message || "Failed to fetch next page",
+          error: errorMessage,
         },
       }));
+      ShowToast.dismiss(toastId);
+      ShowToast.error(errorMessage);
       console.error("Next page error:", error);
     }
   },

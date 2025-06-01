@@ -1,35 +1,28 @@
 "use client";
 import ListeDesPurchases from "@/components/ListeDesPurchases";
-import ListeDesWastes from "@/components/ListeDesWastes";
-import AddWasteSheet from "@/components/sheet/AddWasteSheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { List } from "lucide-react";
 import { useState } from "react";
 
-
-const WastePage = () => {
-  const [open, setOpen] = useState(false);
+const PurchasePage = () => {
+  const [addOpen, setAddOpen] = useState(false);
 
   return (
-    <main className="w-full">
-      {/* <AddWasteSheet open={open} setOpen={setOpen} /> */}
-      <h1 className="text-xl font-bold capitalize">Gestion des achats</h1>
-      <div className="my-5 w-full flex items-center justify-between">
+    <main className="w-full p-6">
+      <h1 className="text-2xl font-bold capitalize">Gestion des Achats</h1>
+      <div className="my-6 flex items-center justify-between">
         <Input
-          className={"w-64 bg-gray-100"}
+          className="w-64 bg-gray-50"
           name="search"
           type="search"
-          placeholder="Rechercher un déchet"
+          placeholder="Rechercher un achat..."
+          disabled // Placeholder for future implementation
         />
-        <Button className="cursor-pointer" onClick={() => setOpen(true)}>
-          Ajouter un déchet
-        </Button>
+        <Button onClick={() => setAddOpen(true)}>Effectuer un Achat</Button>
       </div>
-      <h3 className="mb-4 font-semibold">Liste des achats</h3>
-      <ListeDesPurchases />
+      <ListeDesPurchases addOpen={addOpen} setAddOpen={setAddOpen} />
     </main>
   );
 };
 
-export default WastePage;
+export default PurchasePage;

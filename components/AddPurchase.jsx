@@ -8,6 +8,7 @@ import { Label } from "@radix-ui/react-label";
 import { X, Plus, Trash } from "lucide-react";
 import { axiosInstance } from "@/utils/axiosInstance";
 import { format } from "date-fns";
+import { ShowToast } from "@/utils/toast";
 
 const AddPurchase = ({ open, setOpen, onPurchaseAdded }) => {
   const {
@@ -169,18 +170,17 @@ const AddPurchase = ({ open, setOpen, onPurchaseAdded }) => {
 
   // Submit purchase
   const handleSubmit = async () => {
-    try {
-      await createPurchase(purchaseInfo);
-      cancel();
-      if (onPurchaseAdded) onPurchaseAdded();
-    } catch (err) {
-      console.error("Failed to create purchase:", err);
-      setFormErrors({
-        submit:
-          err.response?.data?.message || "Erreur lors de l'ajout de l'achat",
-      });
-    }
-  };
+  try {
+    await createPurchase(purchaseInfo);
+    cancel();
+    if (onPurchaseAdded) onPurchaseAdded();
+  } catch (err) {
+    console.error("Failed to create purchase:", err);
+    const errorMessage = err.response?.data?.message || "Erreur lors de l'ajout de l'achat";
+    setFormErrors({ submit: errorMessage });
+    ShowToast.error(errorMessage); // Add toast notification for error
+  }
+};
 
   // Validate steps
   const validateStep = () => {
@@ -863,4 +863,4 @@ const AddPurchase = ({ open, setOpen, onPurchaseAdded }) => {
   );
 };
 
-export default AddPurchase;
+export default AddPurchase; 

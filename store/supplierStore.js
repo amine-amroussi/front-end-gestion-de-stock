@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { axiosInstance } from "@/utils/axiosInstance";
+import { ShowToast } from "@/utils/toast";
 
 export const useSupplier = create((set, get) => ({
   supplierState: {
@@ -40,10 +41,10 @@ export const useSupplier = create((set, get) => ({
         supplierState: {
           ...state.supplierState,
           loadingSupplier: false,
-          error: error.message || "Failed to fetch suppliers",
+          error: error.response?.data?.msg || "Erreur lors de la récupération des fournisseurs.",
         },
       }));
-      console.error("Fetch suppliers error:", error);
+      ShowToast.error(error.response?.data?.msg || "Erreur lors de la récupération des fournisseurs.");
     }
   },
   fetchSupplier: async (id) => {
@@ -56,8 +57,6 @@ export const useSupplier = create((set, get) => ({
 
       if (response.status === 200) {
         const data = response.data;
-        console.log(response);
-        
         set((state) => ({
           supplierState: {
             ...state.supplierState,
@@ -71,13 +70,14 @@ export const useSupplier = create((set, get) => ({
         supplierState: {
           ...state.supplierState,
           loadingSupplier: false,
-          error: error.message || "Failed to fetch supplier",
+          error: error.response?.data?.msg || "Erreur lors de la récupération du fournisseur.",
         },
       }));
-      console.error("Fetch supplier error:", error);
+      ShowToast.error(error.response?.data?.msg || "Erreur lors de la récupération du fournisseur.");
     }
   },
   createSupplier: async (supplierInfo) => {
+    const toastId = ShowToast.loading("Ajout d'un fournisseur...");
     try {
       set((state) => ({
         supplierState: { ...state.supplierState, loadingSupplier: true, error: null },
@@ -96,19 +96,24 @@ export const useSupplier = create((set, get) => ({
             loadingSupplier: false,
           },
         }));
+        ShowToast.dismiss(toastId);
+        ShowToast.successAdd("Fournisseur");
       }
     } catch (error) {
       set((state) => ({
         supplierState: {
           ...state.supplierState,
           loadingSupplier: false,
-          error: error.message || "Failed to create supplier",
+          error: error.response?.data?.msg || "Erreur lors de la création du fournisseur.",
         },
       }));
-      console.error("Create supplier error:", error);
+      ShowToast.dismiss(toastId);
+      ShowToast.error(error.response?.data?.msg || "Erreur lors de la création du fournisseur.");
+      throw error;
     }
   },
   editSupplier: async (supplierInfo, id) => {
+    const toastId = ShowToast.loading("Mise à jour du fournisseur...");
     try {
       set((state) => ({
         supplierState: { ...state.supplierState, loadingSupplier: true, error: null },
@@ -128,16 +133,54 @@ export const useSupplier = create((set, get) => ({
             loadingSupplier: false,
           },
         }));
+        ShowToast.dismiss(toastId);
+        ShowToast.successUpdate("Fournisseur");
       }
     } catch (error) {
       set((state) => ({
         supplierState: {
           ...state.supplierState,
           loadingSupplier: false,
-          error: error.message || "Failed to update supplier",
+          error: error.response?.data?.msg || "Erreur lors de la mise à jour du fournisseur.",
         },
       }));
-      console.error("Edit supplier error:", error);
+      ShowToast.dismiss(toastId);
+      ShowToast.error(error.response?.data?.msg || "Erreur lors de la mise à jour du fournisseur.");
+    }
+  },
+  deleteSupplier: async (id) => {
+    const toastId = ShowToast.loading("Suppression du fournisseur...");
+    try {
+      set((state) => ({
+        supplierState: { ...state.supplierState, loadingSupplier: true, error: null },
+      }));
+
+      const response = await axiosInstance.delete(`/supplier/${id}`);
+
+      if (response.status === 200) {
+        await get().fetchAllSuppliers(
+          get().supplierState.pagination.currentPage,
+          get().supplierState.pagination.pageSize
+        );
+        set((state) => ({
+          supplierState: {
+            ...state.supplierState,
+            loadingSupplier: false,
+          },
+        }));
+        ShowToast.dismiss(toastId);
+        ShowToast.successDelete("Fournisseur");
+      }
+    } catch (error) {
+      set((state) => ({
+        supplierState: {
+          ...state.supplierState,
+          loadingSupplier: false,
+          error: error.response?.data?.msg || "Erreur lors de la suppression du fournisseur.",
+        },
+      }));
+      ShowToast.dismiss(toastId);
+      ShowToast.error(error.response?.data?.msg || "Erreur lors de la suppression du fournisseur.");
     }
   },
   nextPage: async () => {
@@ -155,7 +198,7 @@ export const useSupplier = create((set, get) => ({
         await get().fetchAllSuppliers(nextPage, get().supplierState.pagination.pageSize);
       }
     } catch (error) {
-      console.error("Next page error:", error);
+      ShowToast.error("Erreur lors du changement de page.");
     }
   },
 }));

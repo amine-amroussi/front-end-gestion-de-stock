@@ -1,20 +1,20 @@
 "use client";
 import { Trash, Edit, Boxes, ChevronRight, ChevronLeft } from "lucide-react";
-import { useEffect, useLayoutEffect, useState } from "react";
-import EditBoxSheet from "./sheet/EditBoxSheet";
+import { useEffect, useState } from "react";
 import { useProduct } from "@/store/productStore";
 import EditProductSheet from "./sheet/EditProductSheet";
 import { Button } from "./ui/button";
+import { ShowToast } from "@/utils/toast";
+import { axiosInstance } from "@/utils/axiosInstance";
 
 const ListeDesProduits = () => {
   const [open, setOpen] = useState(false);
   const [productId, setProductId] = useState(null);
   const {
-    productState: { products, loadingProduct, error, pagination },
+    productState: { products, loadingProduct, pagination },
     fetchAllProducts,
     nextPage,
   } = useProduct();
-
 
   useEffect(() => {
     fetchAllProducts(pagination.currentPage, pagination.pageSize);
@@ -26,10 +26,21 @@ const ListeDesProduits = () => {
     }
   };
 
-    // Handle product addition (refresh list after adding)
-  const handleProductAdded = () => {
-    fetchAllProducts(pagination.currentPage, pagination.pageSize);
-    setSheetOpen(false);
+  const handleDelete = async (id) => {
+    const toastId = ShowToast.loading("Suppression du produit...");
+    try {
+      const response = await axiosInstance.delete(`/product/${id}`);
+      if (response.status === 200) {
+        await fetchAllProducts(pagination.currentPage, pagination.pageSize);
+        ShowToast.dismiss(toastId);
+        ShowToast.successDelete();
+      } else {
+        throw new Error("Échec de la suppression");
+      }
+    } catch (error) {
+      ShowToast.dismiss(toastId);
+      ShowToast.error(error.response?.data?.msg || "Erreur lors de la suppression du produit.");
+    }
   };
 
   const renderPageNumbers = () => {
@@ -56,6 +67,7 @@ const ListeDesProduits = () => {
   return (
     <div className="overflow-x-auto">
       <EditProductSheet open={open} setOpen={setOpen} productId={productId} />
+      {loadingProduct && <p className="text-gray-600 mb-4">Chargement...</p>}
       <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>
@@ -72,13 +84,13 @@ const ListeDesProduits = () => {
               En stock
             </th>
             <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Unite en stock
+              Unité en stock
             </th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Prix
             </th>
-            <th className="px-6 py-3 text-center  text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Capacity de crate
+            <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Capacité de crate
             </th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Crate
@@ -101,26 +113,30 @@ const ListeDesProduits = () => {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">{product.genre}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-center">
-                  {product.stock}
+                  {product.stock || 0}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-center">
-                  {product.uniteInStock}
+                  {product.uniteInStock || 0}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-center">
-                  {product.priceUnite}
+                  {product.priceUnite || 0}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-center">
-                  {product.capacityByBox}
+                  {product.capacityByBox || 0}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  {product.BoxAssociation.designation}
+                  {product.BoxAssociation ? product.BoxAssociation.designation : "Aucun crate"}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  {/* <button>
+                  <button className="mr-2" onClick={() => handleDelete(product.id)}>
                     <Trash className="w-4 h-4 cursor-pointer" />
-                  </button> */}
-
-                  <button onClick={() => {setOpen(true); setProductId(product.id)}}>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setOpen(true);
+                      setProductId(product.id);
+                    }}
+                  >
                     <Edit className="w-4 h-4 cursor-pointer" />
                   </button>
                 </td>
