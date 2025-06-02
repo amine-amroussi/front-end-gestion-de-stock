@@ -15,7 +15,7 @@ export const useTrip = create((set, get) => ({
       pageSize: 10
     }
   },
- fetchAllTrips: async (page = 1, params = {}) => {
+  fetchAllTrips: async (page = 1, params = {}) => {
     try {
       set((state) => ({
         tripState: { ...state.tripState, loadingTrip: true, error: null }
@@ -119,83 +119,83 @@ export const useTrip = create((set, get) => ({
     }
   },
   startTrip: async (tripData) => {
-  try {
-    console.log("Sending startTrip request with data:", tripData);
-    set((state) => ({
-      tripState: { ...state.tripState, loadingTrip: true, error: null },
-    }));
-
-    const response = await axiosInstance.post(`/trip/start`, tripData);
-    console.log("startTrip response:", response.data);
-
-    if (response.status === 201) {
+    try {
+      console.log("Sending startTrip request with data:", tripData);
       set((state) => ({
-        tripState: {
-          ...state.tripState,
-          activeTrips: [...state.tripState.activeTrips, response.data.trip],
-        },
+        tripState: { ...state.tripState, loadingTrip: true, error: null },
       }));
-      await get().fetchActiveTrips();
-    }
-  } catch (error) {
-    console.log(error);
-    
-    const errorMessage = error.response?.data?.message || "Erreur lors du démarrage de la tournée.";
-    console.error("startTrip error:", {
-      message: errorMessage,
-      status: error.response?.status,
-      data: error.response?.data,
-      request: tripData,
-    });
-    set((state) => ({
-      tripState: { ...state.tripState, loadingTrip: false, error: errorMessage },
-    }));
-    toast.error(errorMessage);
-    throw error;
-  } finally {
-    set((state) => ({
-      tripState: { ...state.tripState, loadingTrip: false },
-    }));
-  }
-},
-finishTrip: async (tripId, tripData) => {
-  try {
-    set((state) => ({
-      tripState: { ...state.tripState, loadingTrip: true, error: null },
-    }));
-    console.log("Sending finishTrip request for tripId:", tripId, "with data:", JSON.stringify(tripData, null, 2));
 
-    const response = await axiosInstance.post(`/trip/finish/${tripId}`, tripData);
-    console.log("finishTrip response:", response.data);
+      const response = await axiosInstance.post(`/trip/start`, tripData);
+      console.log("startTrip response:", response.data);
 
-    if (response.status === 200) {
+      if (response.status === 201) {
+        set((state) => ({
+          tripState: {
+            ...state.tripState,
+            activeTrips: [...state.tripState.activeTrips, response.data.trip],
+          },
+        }));
+        await get().fetchActiveTrips();
+      }
+    } catch (error) {
+      console.log(error);
+      
+      const errorMessage = error.response?.data?.message || "Erreur lors du démarrage de la tournée.";
+      console.error("startTrip error:", {
+        message: errorMessage,
+        status: error.response?.status,
+        data: error.response?.data,
+        request: tripData,
+      });
       set((state) => ({
-        tripState: {
-          ...state.tripState,
-          activeTrips: state.tripState.activeTrips.filter(trip => trip.id !== tripId),
-        },
+        tripState: { ...state.tripState, loadingTrip: false, error: errorMessage },
       }));
-      await get().fetchAllTrips(get().tripState.pagination.currentPage, get().tripState.pagination.pageSize);
+      toast.error(errorMessage);
+      throw error;
+    } finally {
+      set((state) => ({
+        tripState: { ...state.tripState, loadingTrip: false },
+      }));
     }
-  } catch (error) {
-    const errorMessage = error.response?.data?.message || "Erreur lors de la finalisation de la tournée.";
-    console.error("finishTrip error:", {
-      message: errorMessage,
-      status: error.response?.status,
-      data: error.response?.data,
-      request: tripData,
-      stack: error.stack,
-    });
-    set((state) => ({
-      tripState: { ...state.tripState, loadingTrip: false, error: errorMessage },
-    }));
-    toast.error(errorMessage);
-  } finally {
-    set((state) => ({
-      tripState: { ...state.tripState, loadingTrip: false },
-    }));
-  }
-},
+  },
+  finishTrip: async (tripId, tripData) => {
+    try {
+      set((state) => ({
+        tripState: { ...state.tripState, loadingTrip: true, error: null },
+      }));
+      console.log("Sending finishTrip request for tripId:", tripId, "with data:", JSON.stringify(tripData, null, 2));
+
+      const response = await axiosInstance.post(`/trip/finish/${tripId}`, tripData);
+      console.log("finishTrip response:", response.data);
+
+      if (response.status === 200) {
+        set((state) => ({
+          tripState: {
+            ...state.tripState,
+            activeTrips: state.tripState.activeTrips.filter(trip => trip.id !== tripId),
+          },
+        }));
+        await get().fetchAllTrips(get().tripState.pagination.currentPage, get().tripState.pagination.pageSize);
+      }
+    } catch (error) {
+      const errorMessage = error.response?.data?.message || "Erreur lors de la finalisation de la tournée.";
+      console.error("finishTrip error:", {
+        message: errorMessage,
+        status: error.response?.status,
+        data: error.response?.data,
+        request: tripData,
+        stack: error.stack,
+      });
+      set((state) => ({
+        tripState: { ...state.tripState, loadingTrip: false, error: errorMessage },
+      }));
+      toast.error(errorMessage);
+    } finally {
+      set((state) => ({
+        tripState: { ...state.tripState, loadingTrip: false },
+      }));
+    }
+  },
   generateInvoice: async (tripId, type) => {
     try {
       set((state) => ({
@@ -213,6 +213,40 @@ finishTrip: async (tripId, tripData) => {
     } catch (error) {
       const errorMessage = error.response?.data?.message || "Erreur lors de la génération de la facture.";
       console.error("generateInvoice error:", error.response?.data || error);
+      set((state) => ({
+        tripState: { ...state.tripState, loadingTrip: false, error: errorMessage },
+      }));
+      toast.error(errorMessage);
+      throw error;
+    } finally {
+      set((state) => ({
+        tripState: { ...state.tripState, loadingTrip: false },
+      }));
+    }
+  },
+  emptyTruck: async (matricule) => {
+    try {
+      set((state) => ({
+        tripState: { ...state.tripState, loadingTrip: true, error: null },
+      }));
+
+      console.log(`Sending emptyTruck request for matricule: ${matricule}`);
+      const response = await axiosInstance.post(`/trip/empty/${matricule}`);
+      console.log("emptyTruck response:", response.data);
+
+      if (response.status === 200) {
+        await get().fetchAllTrips(get().tripState.pagination.currentPage, {
+          limit: get().tripState.pagination.pageSize
+        });
+        toast.success(`Camion ${matricule} vidé avec succès !`);
+      }
+    } catch (error) {
+      const errorMessage = error.response?.data?.message || "Erreur lors du vidage du camion.";
+      console.error("emptyTruck error:", {
+        message: errorMessage,
+        status: error.response?.status,
+        data: error.response?.data,
+      });
       set((state) => ({
         tripState: { ...state.tripState, loadingTrip: false, error: errorMessage },
       }));
@@ -247,5 +281,5 @@ finishTrip: async (tripId, tripData) => {
       }));
       toast.error(errorMessage);
     }
-  }
+  },
 }));

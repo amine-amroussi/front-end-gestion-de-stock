@@ -8,12 +8,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { format } from "date-fns";
 import PrintAfternoonInvoice from "./PrintAfternoonInvoice";
 import { toast } from "sonner";
+import { axiosInstance } from "@/utils/axiosInstance";
 
 const ListeDesTournees = () => {
-  const { tripState: { trips, loadingTrip, error, pagination }, fetchAllTrips, fetchTripById } = useTrip();
+  const { tripState: { trips, loadingTrip, error, pagination }, fetchAllTrips, fetchTripById, finishTrip, emptyTruck } = useTrip();
   const [selectedTrip, setSelectedTrip] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [invoiceData, setInvoiceData] = useState(null);
+  const [lastTripDetails, setLastTripDetails] = useState(null);
+  const [trucks, setTrucks] = useState([]);
+  const [selectedMatricule, setSelectedMatricule] = useState("");
   const [filterInputs, setFilterInputs] = useState({
     startDate: "",
     endDate: "",
@@ -38,8 +42,20 @@ const ListeDesTournees = () => {
   });
 
   useEffect(() => {
-    fetchAllTrips(1, { page: 1, limit: 10, sortBy: "date", sortOrder: "DESC" });
-  }, []);
+    const fetchData = async () => {
+      try {
+        // Fetch trucks for the dropdown
+        const trucksRes = await axiosInstance.get("/truck");
+        setTrucks(trucksRes.data.trucks || trucksRes.data.data?.trucks || []);
+        // Fetch trips with initial filters
+        await fetchAllTrips(1, { page: 1, limit: 10, sortBy: "date", sortOrder: "DESC" });
+      } catch (error) {
+        console.error("Fetch trucks error:", error);
+        toast.error("Erreur lors de la récupération des camions.");
+      }
+    };
+    fetchData();
+  }, [fetchAllTrips]);
 
   const fetchTripsWithFilters = async (page = 1) => {
     const queryParams = {
@@ -147,8 +163,19 @@ const ListeDesTournees = () => {
         return;
       }
       const trip = await fetchTripById(parsedTripId);
+      console.log("Selected Trip:", trip);
+      console.log("Is Active:", trip.isActive);
       setSelectedTrip(trip);
       setIsModalOpen(true);
+
+      if (trip.TruckAssociation?.matricule) {
+        const response = await axiosInstance.get(`/trip/last/${trip.TruckAssociation.matricule}`);
+        console.log("Last Trip Response:", response.data);
+        setLastTripDetails(response.data);
+      } else {
+        console.log("No truck matricule found for this trip.");
+        setLastTripDetails(null);
+      }
 
       if (!trip.isActive) {
         setInvoiceData({
@@ -158,7 +185,7 @@ const ListeDesTournees = () => {
           seller: trip.SellerAssociation?.name,
           date: trip.date,
           zone: trip.zone,
-          products: trip.TripProducts.map(p => ({
+          products: trip.TripProducts?.map(p => ({
             designation: p.ProductAssociation?.designation,
             qttOut: p.qttOut,
             qttOutUnite: p.qttOutUnite,
@@ -167,28 +194,28 @@ const ListeDesTournees = () => {
             qttVendu: p.qttVendu,
             priceUnite: p.ProductAssociation?.priceUnite,
             totalRevenue: p.qttVendu * (p.ProductAssociation?.priceUnite || 0)
-          })),
-          boxes: trip.TripBoxes.map(b => ({
+          })) || [],
+          boxes: trip.TripBoxes?.map(b => ({
             designation: b.BoxAssociation?.designation || "Inconnu",
             qttOut: b.qttOut,
             qttIn: b.qttIn
-          })),
-          wastes: trip.TripWastes.map(w => ({
-            product: w.WasteAssociation?.ProductAssociation?.trip || w.product || "Inconnu",
+          })) || [],
+          wastes: trip.TripWastes?.map(w => ({
+            product: w.WasteAssociation?.ProductAssociation?.designation || w.product || "Inconnu",
             type: w.type,
             qtt: w.qtt
           })) || [],
-          charges: trip.TripCharges.map(c => ({
-            type: c.ChargeAssociation?.charge || "N/A",
+          charges: trip.TripCharges?.map(c => ({
+            type: c.ChargeAssociation?.type || "N/A",
             amount: c.amount
           })) || [],
           totals: {
-            waitedAmount: trip.waitedAmount,
-            receivedAmount: trip.receivedAmount,
-            benefit: trip.deff,
-            deff: trip.deff,
-            tripCharges: trip.totalCharges,
-            totalWastes: tripCharges
+            waitedAmount: trip.waitedAmount || 0,
+            receivedAmount: trip.receivedAmount || 0,
+            benefit: trip.deff || 0,
+            deff: trip.deff || 0,
+            tripCharges: trip.totalCharges || 0,
+            totalWastes: trip.totalWastes || 0
           }
         });
       }
@@ -198,10 +225,61 @@ const ListeDesTournees = () => {
     }
   };
 
+  const handleEmptyTruck = async () => {
+    try {
+      if (!selectedTrip || !lastTripDetails) {
+        throw new Error("Aucune tournée sélectionnée ou données du dernier trajet indisponibles.");
+      }
+
+      const formData = {
+        tripProducts: lastTripDetails.tripProducts.map(product => ({
+          product_id: product.product,
+          qttReutour: product.qttOut || 0,
+          qttReutourUnite: product.qttOutUnite || 0,
+        })),
+        tripBoxes: lastTripDetails.tripBoxes.map(box => ({
+          box_id: box.box,
+          qttIn: box.qttOut || 0,
+        })),
+        tripWastes: [],
+        tripCharges: [],
+        receivedAmount: 0,
+      };
+
+      await finishTrip(selectedTrip.id, formData);
+      setSelectedTrip(null);
+      setLastTripDetails(null);
+      setIsModalOpen(false);
+      setInvoiceData(null);
+      await fetchTripsWithFilters(pagination.currentPage);
+      toast.success("Camion vidé avec succès ! Tout a été retourné au stock.");
+    } catch (error) {
+      console.error("Error emptying truck:", error);
+      toast.error("Erreur lors du vidage du camion : " + error.message);
+    }
+  };
+
+  const handleEmptyTruckByMatricule = async () => {
+    if (!selectedMatricule) {
+      toast.error("Veuillez sélectionner un camion.");
+      return;
+    }
+    try {
+      await emptyTruck(selectedMatricule);
+      setSelectedMatricule("");
+      await fetchTripsWithFilters(pagination.currentPage);
+      toast.success("Camion vidé avec succès !");
+    } catch (error) {
+      console.error("Error emptying truck by matricule:", error);
+      toast.error("Erreur lors du vidage du camion : " + error.message);
+    }
+  };
+
   const closeModal = () => {
     setIsModalOpen(false);
     setSelectedTrip(null);
     setInvoiceData(null);
+    setLastTripDetails(null);
   };
 
   if (loadingTrip) return <p className="text-center text-gray-600">Chargement...</p>;
@@ -210,6 +288,35 @@ const ListeDesTournees = () => {
   return (
     <div className="p-4">
       <h2 className="text-2xl font-bold text-gray-800 mb-6">Liste des Tournées</h2>
+
+      {/* Empty Truck Section */}
+      <div className="mb-6 bg-white p-4 rounded-lg shadow">
+        <h3 className="text-lg font-medium text-gray-800 mb-4">Vider un Camion</h3>
+        <div className="flex gap-4 items-end">
+          <div>
+            <Label>Sélectionner un Camion</Label>
+            <Select value={selectedMatricule} onValueChange={setSelectedMatricule}>
+              <SelectTrigger>
+                <SelectValue placeholder="Choisir un camion" />
+              </SelectTrigger>
+              <SelectContent>
+                {trucks.map((truck) => (
+                  <SelectItem key={truck.matricule} value={truck.matricule}>
+                    {truck.matricule}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            onClick={handleEmptyTruckByMatricule}
+            className="bg-red-700 hover:bg-red-800 text-white"
+            disabled={!selectedMatricule}
+          >
+            Vider le Camion
+          </Button>
+        </div>
+      </div>
 
       {/* Filters */}
       <div className="mb-6 bg-white p-4 rounded-lg shadow">
@@ -579,7 +686,7 @@ const ListeDesTournees = () => {
                     </p>
                   </div>
                   <div>
-                    <p className="text-gray-700 font-medium">Différence:</p>
+                    <p className ="text-gray-700 font-medium">Différence:</p>
                     <p className="text-gray-600">
                       {selectedTrip.isActive ? "Non disponible" : (selectedTrip.deff || 0)} MAD
                     </p>
@@ -593,6 +700,78 @@ const ListeDesTournees = () => {
                 </div>
               </div>
 
+              {/* Last Trip Details */}
+              {lastTripDetails && lastTripDetails.tripProducts.length > 0 && (
+                <div className="mt-4">
+                  <h6 className="text-lg font-medium text-gray-800 mb-2">Restes du Dernier Trajet:</h6>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm border-collapse">
+                      <thead className="bg-gray-100">
+                        <tr>
+                          <th className="p-2 text-left border-b">Désignation</th>
+                          <th className="p-2 text-left border-b">Qté Sortie (Caisses)</th>
+                          <th className="p-2 text-left border-b">Qté Sortie (Unités)</th>
+                          <th className="p-2 text-left border-b">Qté Retour (Caisses)</th>
+                          <th className="p-2 text-left border-b">Qté Retour (Unités)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {lastTripDetails.tripProducts.map((product, index) => (
+                          <tr key={index} className="border-b">
+                            <td className="p-2">
+                              {product.ProductAssociation?.designation || "Inconnu"}
+                            </td>
+                            <td className="p-2">{product.qttOut}</td>
+                            <td className="p-2">{product.qttOutUnite}</td>
+                            <td className="p-2">{product.qttReutour || 0}</td>
+                            <td className="p-2">{product.qttReutourUnite || 0}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+              {lastTripDetails && lastTripDetails.tripBoxes.length > 0 && (
+                <div className="mt-4">
+                  <h6 className="text-lg font-medium text-gray-800 mb-2">Boîtes Restantes:</h6>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm border-collapse">
+                      <thead className="bg-gray-100">
+                        <tr>
+                          <th className="p-2 text-left border-b">Désignation</th>
+                          <th className="p-2 text-left border-b">Qté Sortie</th>
+                          <th className="p-2 text-left border-b">Qté Entrée</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {lastTripDetails.tripBoxes.map((box, index) => (
+                          <tr key={index} className="border-b">
+                            <td className="p-2">
+                              {box.BoxAssociation?.designation || "Inconnu"}
+                            </td>
+                            <td className="p-2">{box.qttOut}</td>
+                            <td className="p-2">{box.qttIn || 0}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Debug Message for Button Visibility */}
+              {selectedTrip.isActive && !lastTripDetails && (
+                <div className="mt-4 text-yellow-600">
+                  <p>Le bouton "Vider le camion" n'est pas disponible car aucun trajet précédent n'a été trouvé pour ce camion.</p>
+                </div>
+              )}
+              {!selectedTrip.isActive && (
+                <div className="mt-4 text-yellow-600">
+                  <p>Le bouton "Vider le camion" n'est disponible que pour les tournées actives.</p>
+                </div>
+              )}
+
               <div className="mt-6 flex justify-end gap-3">
                 <Button
                   onClick={closeModal}
@@ -600,6 +779,14 @@ const ListeDesTournees = () => {
                 >
                   Fermer
                 </Button>
+                {selectedTrip.isActive && lastTripDetails && (
+                  <Button
+                    onClick={handleEmptyTruck}
+                    className="bg-red-700 hover:bg-red-800 text-white"
+                  >
+                    Vider le camion
+                  </Button>
+                )}
                 {!selectedTrip.isActive && invoiceData && (
                   <PrintAfternoonInvoice invoiceData={invoiceData} />
                 )}

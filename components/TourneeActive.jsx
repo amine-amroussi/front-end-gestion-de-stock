@@ -33,9 +33,14 @@ const TourneeActive = () => {
             axiosInstance.get("/employee"),
             fetchActiveTrips(), // Call fetchActiveTrips to populate activeTrips state
           ]);
-        setProducts(productsRes.data.data?.products || []);
-        setBoxes(boxesRes.data.boxes || []);
+        const productsData =
+          productsRes.data.products || productsRes.data.data?.products || [];
+        const boxesData =
+          boxesRes.data.boxes || boxesRes.data.data?.boxes || [];
+        setProducts(productsData);
+        setBoxes(boxesData);
         setEmployees(employeesRes.data.data?.employees || []);
+        await fetchActiveTrips();
       } catch (error) {
         console.error("Fetch error:", error);
         toast.error("Erreur lors de la récupération des données.");

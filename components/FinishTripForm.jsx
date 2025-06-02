@@ -16,26 +16,51 @@ const FinishTripForm = ({ tripDetails, onSubmit, onCancel, products, boxes }) =>
   });
 
   useEffect(() => {
+    console.log("FinishTripForm useEffect triggered", {
+      tripDetails: tripDetails ? {
+        id: tripDetails.id,
+        TripProducts: tripDetails.TripProducts?.map(p => ({
+          product: p.product,
+          designation: p.ProductAssociation?.designation,
+        })),
+      } : null,
+      products: products?.map(p => ({ id: p.id, designation: p.designation })),
+      boxes: boxes?.map(b => ({ id: b.id, designation: b.designation })),
+    });
+
     if (tripDetails) {
-      console.log("Trip Products:", tripDetails.TripProducts);
-      setFormData({
-        tripProducts: tripDetails.TripProducts.map(p => ({
-          product_id: parseInt(p.product),
-          designation: products.find(prod => prod.id === parseInt(p.product))?.designation || "Inconnu",
-          priceUnite: products.find(prod => prod.id === parseInt(p.product))?.priceUnite || 0,
-          capacityByBox: products.find(prod => prod.id === parseInt(p.product))?.capacityByBox || 0,
+      const tripProducts = tripDetails.TripProducts?.map(p => {
+        const productId = Number(p.product);
+        const productFromProps = products.find(prod => Number(prod.id) === productId);
+        const designation = p.ProductAssociation?.designation || 
+                           productFromProps?.designation || 
+                           "Produit inconnu";
+        return {
+          product_id: productId,
+          designation,
           qttReutour: 0,
           qttReutourUnite: 0,
-        })),
-        tripBoxes: tripDetails.TripBoxes.map(b => ({
-          box_id: parseInt(b.box),
-          designation: boxes.find(box => box.id === parseInt(b.box))?.designation || "Inconnu",
+        };
+      }) || [];
+
+      setFormData({
+        tripProducts,
+        tripBoxes: tripDetails.TripBoxes?.map(b => ({
+          box_id: Number(b.box),
+          designation: b.BoxAssociation?.designation || 
+                      boxes.find(box => Number(box.id) === Number(b.box))?.designation || 
+                      "Boîte inconnue",
           qttIn: 0,
-        })),
+        })) || [],
         tripWastes: [],
         tripCharges: [],
         receivedAmount: "",
       });
+
+      if (!tripProducts.length) {
+        console.warn("No trip products found in tripDetails");
+        toast.warning("Aucun produit associé à cette tournée.");
+      }
     }
   }, [tripDetails, products, boxes]);
 
@@ -43,17 +68,7 @@ const FinishTripForm = ({ tripDetails, onSubmit, onCancel, products, boxes }) =>
     const updatedForm = { ...formData };
     updatedForm[type][index] = { ...updatedForm[type][index], [field]: value };
     setFormData(updatedForm);
-  };
-
-  const calculateSoldUnits = (product, index) => {
-    const { capacityByBox } = product;
-    const qttOut = tripDetails.TripProducts[index].qttOut || 0;
-    const qttOutUnite = tripDetails.TripProducts[index].qttOutUnite || 0;
-    const qttReutour = parseInt(product.qttReutour) || 0;
-    const qttReutourUnite = parseInt(product.qttReutourUnite) || 0;
-    const totalUnitsOut = qttOut * capacityByBox + qttOutUnite;
-    const totalUnitsReturned = qttReutour * capacityByBox + qttReutourUnite;
-    return totalUnitsOut - totalUnitsReturned;
+    console.log(`Updated ${type}[${index}].${field}:`, value);
   };
 
   const addWaste = () => {
@@ -61,6 +76,7 @@ const FinishTripForm = ({ tripDetails, onSubmit, onCancel, products, boxes }) =>
       ...formData,
       tripWastes: [...formData.tripWastes, { product_id: "", type: "", qtt: "" }],
     });
+    console.log("Added waste entry");
   };
 
   const removeWaste = (index) => {
@@ -68,6 +84,7 @@ const FinishTripForm = ({ tripDetails, onSubmit, onCancel, products, boxes }) =>
       ...formData,
       tripWastes: formData.tripWastes.filter((_, i) => i !== index),
     });
+    console.log("Removed waste entry:", index);
   };
 
   const addCharge = () => {
@@ -75,6 +92,7 @@ const FinishTripForm = ({ tripDetails, onSubmit, onCancel, products, boxes }) =>
       ...formData,
       tripCharges: [...formData.tripCharges, { type: "", amount: "" }],
     });
+    console.log("Added charge entry");
   };
 
   const removeCharge = (index) => {
@@ -82,17 +100,24 @@ const FinishTripForm = ({ tripDetails, onSubmit, onCancel, products, boxes }) =>
       ...formData,
       tripCharges: formData.tripCharges.filter((_, i) => i !== index),
     });
+    console.log("Removed charge entry:", index);
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
     try {
+      console.log("Submitting form with data:", {
+        tripProducts: formData.tripProducts,
+        products: products.map(p => ({ id: p.id, designation: p.designation })),
+      });
+
       const submitData = {
         tripProducts: formData.tripProducts.map(p => {
-          const productExists = products.some(prod => prod.id === p.product_id);
-          if (!productExists) {
-            console.warn(`Produit invalide (ID: ${p.product_id}) ignoré. Vérifiez les données des produits.`);
-            return null;
+          // Skip validation if ProductAssociation exists in tripDetails
+          const tripProduct = tripDetails.TripProducts.find(tp => Number(tp.product) === Number(p.product_id));
+          if (!tripProduct && !products.some(prod => Number(prod.id) === Number(p.product_id))) {
+            console.warn(`Invalid product ID: ${p.product_id} not found in products or tripDetails`);
+            throw new Error(`Produit invalide (ID: ${p.product_id})`);
           }
           const qttReutour = parseInt(p.qttReutour) || 0;
           const qttReutourUnite = parseInt(p.qttReutourUnite) || 0;
@@ -104,9 +129,9 @@ const FinishTripForm = ({ tripDetails, onSubmit, onCancel, products, boxes }) =>
             qttReutour,
             qttReutourUnite,
           };
-        }).filter(p => p !== null),
+        }),
         tripBoxes: formData.tripBoxes.map(b => {
-          if (!boxes.some(box => box.id === b.box_id)) {
+          if (!boxes.some(box => Number(box.id) === Number(b.box_id))) {
             throw new Error(`Boîte invalide (ID: ${b.box_id})`);
           }
           const qttIn = parseInt(b.qttIn) || 0;
@@ -154,20 +179,23 @@ const FinishTripForm = ({ tripDetails, onSubmit, onCancel, products, boxes }) =>
       toast.error(error.message);
     }
   };
-
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
         <h6 className="text-md font-medium text-black">Produits Retournés:</h6>
-        {formData.tripProducts.map((product, index) => {
-          const soldUnits = calculateSoldUnits(product, index);
-          const totalPrice = soldUnits * product.priceUnite;
-          return (
+        {formData.tripProducts.length === 0 ? (
+          <p className="text-red-500 text-sm">Aucun produit disponible pour cette tournée.</p>
+        ) : (
+          formData.tripProducts.map((product, index) => (
             <div key={index} className="border p-2 rounded space-y-2 mt-2">
               <p>
                 {product.designation} (ID: {product.product_id})
-                (Sortie: {tripDetails.TripProducts[index].qttOut} caisses,{" "}
-                {tripDetails.TripProducts[index].qttOutUnite} unités)
+                {tripDetails.TripProducts[index] && (
+                  <>
+                    (Sortie: {tripDetails.TripProducts[index].qttOut} caisses,{" "}
+                    {tripDetails.TripProducts[index].qttOutUnite} unités)
+                  </>
+                )}
               </p>
               <div className="grid grid-cols-2 gap-2">
                 <div>
@@ -188,37 +216,10 @@ const FinishTripForm = ({ tripDetails, onSubmit, onCancel, products, boxes }) =>
                     min="0"
                   />
                 </div>
-                <div>
-                  <Label>Qté Vendue (Unités)</Label>
-                  <Input
-                    type="text"
-                    value={soldUnits}
-                    readOnly
-                    className="bg-gray-100"
-                  />
-                </div>
-                <div>
-                  <Label>Prix Unitaire (MAD)</Label>
-                  <Input
-                    type="text"
-                    value={product.priceUnite}
-                    readOnly
-                    className="bg-gray-100"
-                  />
-                </div>
-                <div>
-                  <Label>Prix Total (MAD)</Label>
-                  <Input
-                    type="text"
-                    value={totalPrice}
-                    readOnly
-                    className="bg-gray-100"
-                  />
-                </div>
               </div>
             </div>
-          );
-        })}
+          ))
+        )}
       </div>
 
       <div>
@@ -227,7 +228,9 @@ const FinishTripForm = ({ tripDetails, onSubmit, onCancel, products, boxes }) =>
           <div key={index} className="border p-2 rounded space-y-2 mt-2">
             <p>
               {box.designation} (ID: {box.box_id})
-              (Qté Initiale: {tripDetails.TripBoxes[index].qttOut})
+              {tripDetails.TripBoxes[index] && (
+                <> (Sortie: {tripDetails.TripBoxes[index].qttOut})</>
+              )}
             </p>
             <div>
               <Label>Qté Entrée</Label>
@@ -256,7 +259,7 @@ const FinishTripForm = ({ tripDetails, onSubmit, onCancel, products, boxes }) =>
                 >
                   <option value="">Sélectionnez</option>
                   {products.map(p => (
-                    <option key={p.id} value={p.id}>{p.designation}</option>
+                    <option key={p.id} value={p.id}>{p.designation || `ID: ${p.id}`}</option>
                   ))}
                 </select>
               </div>

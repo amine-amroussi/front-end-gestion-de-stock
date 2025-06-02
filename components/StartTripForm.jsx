@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@radix-ui/react-label";
-import { X, Plus } from "lucide-react";
+import { X } from "lucide-react";
 import { axiosInstance } from "@/utils/axiosInstance";
 import { toast } from "sonner";
 import PrintInvoice from "./PrintInvoice";
@@ -25,8 +25,8 @@ const StartTripForm = ({ open, onOpenChange, onTripStarted }) => {
   const [employees, setEmployees] = useState([]);
   const [products, setProducts] = useState([]);
   const [boxes, setBoxes] = useState([]);
-  const [remainingProducts, setRemainingProducts] = useState([]); // Remaining products
-  const [remainingBoxes, setRemainingBoxes] = useState([]); // New state for remaining boxes
+  const [newProduct, setNewProduct] = useState({ product_id: "", qttOut: 0, qttOutUnite: 0 });
+  const [newBox, setNewBox] = useState({ box_id: "", qttOut: 0 });
   const [loading, setLoading] = useState(false);
   const [activeStep, setActiveStep] = useState(1);
   const [formErrors, setFormErrors] = useState({});
@@ -43,7 +43,7 @@ const StartTripForm = ({ open, onOpenChange, onTripStarted }) => {
         setTrucks(trucksRes.data.trucks || []);
         setEmployees(employeesRes.data.employees || []);
         setProducts(productsRes.data.products || []);
-        setBoxes(boxesRes.data.boxes || []);
+        setBoxes(boxesRes.data.data.boxes || []);
       } catch (error) {
         setFormErrors({ fetch: "Erreur lors de la récupération des données pour le formulaire." });
         console.error("Fetch error:", error);
@@ -57,41 +57,34 @@ const StartTripForm = ({ open, onOpenChange, onTripStarted }) => {
       if (formData.truck_matricule) {
         try {
           const response = await axiosInstance.get(`/trip/last/${formData.truck_matricule}`);
-          console.log("fetchRemainingItems response:", response.data);
           const tripProducts = response.data.tripProducts || [];
           const tripBoxes = response.data.tripBoxes || [];
 
-          // Filter remaining products
-          const remaining = tripProducts
-            .filter(tp => (tp.qttReutour > 0 || tp.qttReutourUnite > 0))
+          // Add remaining products to tripProducts
+          const remainingProducts = tripProducts
+            .filter(tp => tp.qttReutour > 0 || tp.qttReutourUnite > 0)
             .map(tp => ({
               product_id: tp.product.toString(),
               qttOut: tp.qttReutour || 0,
               qttOutUnite: tp.qttReutourUnite || 0,
             }));
-          setRemainingProducts(remaining);
-          setFormData(prev => ({
-            ...prev,
-            tripProducts: [...remaining],
-          }));
 
-          // Filter remaining boxes
-          const remainingBoxData = tripBoxes
+          // Add remaining boxes to tripBoxes
+          const remainingBoxes = tripBoxes
             .filter(tb => tb.qttIn > 0)
             .map(tb => ({
               box_id: tb.box.toString(),
               qttOut: tb.qttIn || 0,
             }));
-          setRemainingBoxes(remainingBoxData);
+
           setFormData(prev => ({
             ...prev,
-            tripBoxes: [...remainingBoxData],
+            tripProducts: remainingProducts,
+            tripBoxes: remainingBoxes,
           }));
         } catch (error) {
           console.error("fetchRemainingItems error:", error);
           if (error.response?.status === 404) {
-            setRemainingProducts([]);
-            setRemainingBoxes([]);
             setFormData(prev => ({
               ...prev,
               tripProducts: [],
@@ -102,8 +95,6 @@ const StartTripForm = ({ open, onOpenChange, onTripStarted }) => {
           }
         }
       } else {
-        setRemainingProducts([]);
-        setRemainingBoxes([]);
         setFormData(prev => ({
           ...prev,
           tripProducts: [],
@@ -125,49 +116,82 @@ const StartTripForm = ({ open, onOpenChange, onTripStarted }) => {
     setFormErrors({ ...formErrors, [name]: "" });
   };
 
-  const handleProductChange = (index, field, value) => {
-    const updatedProducts = [...formData.tripProducts];
-    updatedProducts[index] = { ...updatedProducts[index], [field]: field === "product_id" ? value : parseInt(value) || 0 };
-    setFormData({ ...formData, tripProducts: updatedProducts });
-    setFormErrors({ ...formErrors, [`product_${index}_${field}`]: "" });
+  const handleNewProductChange = (field, value) => {
+    setNewProduct(prev => ({ ...prev, [field]: field === "product_id" ? value : parseInt(value) || 0 }));
   };
 
   const addProduct = () => {
-    setFormData({
-      ...formData,
-      tripProducts: [
-        ...formData.tripProducts,
-        { product_id: "", qttOut: 0, qttOutUnite: 0 },
-      ],
-    });
+    if (!newProduct.product_id) {
+      setFormErrors({ ...formErrors, new_product_id: "Produit requis" });
+      return;
+    }
+    if (newProduct.qttOut <= 0 && newProduct.qttOutUnite <= 0) {
+      setFormErrors({ ...formErrors, new_product_qty: "Au moins une quantité positive requise" });
+      return;
+    }
+
+    const existingProduct = formData.tripProducts.find(p => p.product_id === newProduct.product_id);
+    if (existingProduct) {
+      const updatedProducts = formData.tripProducts.map(p =>
+        p.product_id === newProduct.product_id
+          ? {
+              ...p,
+              qttOut: p.qttOut + newProduct.qttOut,
+              qttOutUnite: p.qttOutUnite + newProduct.qttOutUnite,
+            }
+          : p
+      );
+      setFormData(prev => ({ ...prev, tripProducts: updatedProducts }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        tripProducts: [
+          ...prev.tripProducts,
+          {
+            product_id: newProduct.product_id,
+            qttOut: newProduct.qttOut,
+            qttOutUnite: newProduct.qttOutUnite,
+          },
+        ],
+      }));
+    }
+    setNewProduct({ product_id: "", qttOut: 0, qttOutUnite: 0 });
+    setFormErrors({ ...formErrors, new_product_id: "", new_product_qty: "" });
   };
 
-  const removeProduct = (index) => {
-    setFormData({
-      ...formData,
-      tripProducts: formData.tripProducts.filter((_, i) => i !== index),
-    });
-  };
-
-  const handleBoxChange = (index, field, value) => {
-    const updatedBoxes = [...formData.tripBoxes];
-    updatedBoxes[index] = { ...updatedBoxes[index], [field]: field === "box_id" ? value : parseInt(value) || 0 };
-    setFormData({ ...formData, tripBoxes: updatedBoxes });
-    setFormErrors({ ...formErrors, [`box_${index}_${field}`]: "" });
+  const handleNewBoxChange = (field, value) => {
+    setNewBox(prev => ({ ...prev, [field]: field === "box_id" ? value : parseInt(value) || 0 }));
   };
 
   const addBox = () => {
-    setFormData({
-      ...formData,
-      tripBoxes: [...formData.tripBoxes, { box_id: "", qttOut: 0 }],
-    });
-  };
+    if (!newBox.box_id) {
+      setFormErrors({ ...formErrors, new_box_id: "Boîte requise" });
+      return;
+    }
+    if (newBox.qttOut <= 0) {
+      setFormErrors({ ...formErrors, new_box_qty: "Quantité positive requise" });
+      return;
+    }
 
-  const removeBox = (index) => {
-    setFormData({
-      ...formData,
-      tripBoxes: formData.tripBoxes.filter((_, i) => i !== index),
-    });
+    const existingBox = formData.tripBoxes.find(b => b.box_id === newBox.box_id);
+    if (existingBox) {
+      const updatedBoxes = formData.tripBoxes.map(b =>
+        b.box_id === newBox.box_id
+          ? { ...b, qttOut: b.qttOut + newBox.qttOut }
+          : b
+      );
+      setFormData(prev => ({ ...prev, tripBoxes: updatedBoxes }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        tripBoxes: [
+          ...prev.tripBoxes,
+          { box_id: newBox.box_id, qttOut: newBox.qttOut },
+        ],
+      }));
+    }
+    setNewBox({ box_id: "", qttOut: 0 });
+    setFormErrors({ ...formErrors, new_box_id: "", new_box_qty: "" });
   };
 
   const cancel = () => {
@@ -183,9 +207,9 @@ const StartTripForm = ({ open, onOpenChange, onTripStarted }) => {
       tripProducts: [],
       tripBoxes: [],
     });
+    setNewProduct({ product_id: "", qttOut: 0, qttOutUnite: 0 });
+    setNewBox({ box_id: "", qttOut: 0 });
     setFormErrors({});
-    setRemainingProducts([]);
-    setRemainingBoxes([]);
   };
 
   const handleSubmit = async () => {
@@ -228,23 +252,12 @@ const StartTripForm = ({ open, onOpenChange, onTripStarted }) => {
       if (!formData.date) errors.date = "Date requise";
       if (!formData.zone) errors.zone = "Zone requise";
     } else if (activeStep === 3) {
-      if (formData.tripProducts.length === 0) {
-        errors.products = "Au moins un produit requis";
-      } else {
-        formData.tripProducts.forEach((p, i) => {
-          if (!p.product_id) errors[`product_${i}_product_id`] = "Produit requis";
-          if (p.qttOut < 0) errors[`product_${i}_qttOut`] = "Quantité non négative requise";
-          if (p.qttOutUnite < 0) errors[`product_${i}_qttOutUnite`] = "Quantité non négative requise";
-        });
+      if (!formData.tripProducts.some(p => p.qttOut > 0 || p.qttOutUnite > 0)) {
+        errors.products = "Au moins un produit avec quantité requise";
       }
     } else if (activeStep === 4) {
-      if (formData.tripBoxes.length === 0) {
-        errors.boxes = "Au moins une boîte requise";
-      } else {
-        formData.tripBoxes.forEach((b, i) => {
-          if (!b.box_id) errors[`box_${i}_box_id`] = "Boîte requise";
-          if (b.qttOut <= 0) errors[`box_${i}_qttOut`] = "Quantité positive requise";
-        });
+      if (!formData.tripBoxes.some(b => b.qttOut > 0)) {
+        errors.boxes = "Au moins une boîte avec quantité requise";
       }
     }
     setFormErrors(errors);
@@ -471,201 +484,174 @@ const StartTripForm = ({ open, onOpenChange, onTripStarted }) => {
 
         {activeStep === 3 && (
           <div className="space-y-3">
-            {/* Show remaining products only if there are any */}
-            {remainingProducts.length > 0 && (
-              <div className="mb-4">
-                <h3 className="text-base font-semibold">Produits Restants dans le Camion</h3>
-                <table className="w-full text-sm border-collapse">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left p-1">Désignation</th>
-                      <th className="text-left p-1">Qté Caisses Restantes</th>
-                      <th className="text-left p-1">Qté Unités Restantes</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {remainingProducts.map((rp, index) => (
-                      <tr key={index} className="border-b">
-                        <td className="p-1">{products.find(p => p.id === parseInt(rp.product_id))?.designation || "N/A"}</td>
-                        <td className="p-1">{rp.qttOut || 0}</td>
-                        <td className="p-1">{rp.qttOutUnite || 0}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            <h3 className="text-base font-semibold">Nouveaux Produits</h3>
+            <h3 className="text-base font-semibold">Produits</h3>
             {formErrors.products && (
               <p className="text-red-500 text-sm">{formErrors.products}</p>
             )}
-            {formData.tripProducts.map((product, index) => (
-              <div key={index} className="border p-3 rounded space-y-2">
-                <div>
-                  <Label className="text-sm font-medium">Produit</Label>
-                  <select
-                    value={product.product_id}
-                    onChange={(e) => handleProductChange(index, "product_id", e.target.value)}
-                    className={`w-full border rounded p-2 text-sm ${
-                      formErrors[`product_${index}_product_id`] ? "border-red-500" : "border-gray-300"
-                    }`}
-                    disabled={loading || index < remainingProducts.length}
-                  >
-                    <option value="">Sélectionnez un produit</option>
-                    {products.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.designation}
-                      </option>
-                    ))}
-                  </select>
-                  {formErrors[`product_${index}_product_id`] && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors[`product_${index}_product_id`]}</p>
-                  )}
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <Label className="text-sm font-medium">Qté Sortie</Label>
-                    <Input
-                      type="number"
-                      value={product.qttOut}
-                      onChange={(e) => handleProductChange(index, "qttOut", e.target.value)}
-                      min="0"
-                      className={`text-sm ${
-                        formErrors[`product_${index}_qttOut`] ? "border-red-500" : "border-gray-300"
-                      }`}
-                      disabled={loading}
-                    />
-                    {formErrors[`product_${index}_qttOut`] && (
-                      <p className="text-red-500 text-xs mt-1">{formErrors[`product_${index}_qttOut`]}</p>
-                    )}
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium">Qté Unité Sortie</Label>
-                    <Input
-                      type="number"
-                      value={product.qttOutUnite}
-                      onChange={(e) => handleProductChange(index, "qttOutUnite", e.target.value)}
-                      min="0"
-                      className="text-sm"
-                      disabled={loading}
-                    />
-                    {formErrors[`product_${index}_qttOutUnite`] && (
-                      <p className="text-red-500 text-xs mt-1">{formErrors[`product_${index}_qttOutUnite`]}</p>
-                    )}
-                  </div>
-                </div>
-                {index >= remainingProducts.length && (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => removeProduct(index)}
-                    disabled={loading}
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left p-1">Désignation</th>
+                  <th className="text-left p-1">Qté Caisses</th>
+                  <th className="text-left p-1">Qté Unités</th>
+                </tr>
+              </thead>
+              <tbody>
+                {formData.tripProducts.length === 0 ? (
+                  <tr>
+                    <td colSpan="3" className="p-1 text-center text-gray-500">
+                      Aucun produit ajouté
+                    </td>
+                  </tr>
+                ) : (
+                  formData.tripProducts.map((product, index) => (
+                    <tr key={index} className="border-b">
+                      <td className="p-1">
+                        {products.find(p => p.id === parseInt(product.product_id))?.designation || "N/A"}
+                      </td>
+                      <td className="p-1">{product.qttOut}</td>
+                      <td className="p-1">{product.qttOutUnite}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+
+            <div className="flex items-end gap-2 mt-2">
+              <div className="flex-1">
+                <Label className="text-sm font-medium">Produit</Label>
+                <select
+                  value={newProduct.product_id}
+                  onChange={(e) => handleNewProductChange("product_id", e.target.value)}
+                  className={`w-full border rounded p-2 text-sm ${
+                    formErrors.new_product_id ? "border-red-500" : "border-gray-300"
+                  }`}
+                  disabled={loading}
+                >
+                  <option value="">Sélectionnez un produit</option>
+                  {products.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.designation}
+                    </option>
+                  ))}
+                </select>
+                {formErrors.new_product_id && (
+                  <p className="text-red-500 text-xs mt-1">{formErrors.new_product_id}</p>
                 )}
               </div>
-            ))}
-            <Button
-              onClick={addProduct}
-              disabled={loading || products.length === 0}
-              className="w-full flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              Ajouter Produit
-            </Button>
+              <div className="w-20">
+                <Label className="text-sm font-medium">Caisses</Label>
+                <Input
+                  type="number"
+                  value={newProduct.qttOut}
+                  onChange={(e) => handleNewProductChange("qttOut", e.target.value)}
+                  min="0"
+                  className="text-sm"
+                  disabled={loading}
+                />
+              </div>
+              <div className="w-20">
+                <Label className="text-sm font-medium">Unités</Label>
+                <Input
+                  type="number"
+                  value={newProduct.qttOutUnite}
+                  onChange={(e) => handleNewProductChange("qttOutUnite", e.target.value)}
+                  min="0"
+                  className="text-sm"
+                  disabled={loading}
+                />
+              </div>
+              <Button
+                onClick={addProduct}
+                disabled={loading}
+                className="h-10"
+              >
+                Ajouter
+              </Button>
+            </div>
+            {formErrors.new_product_qty && (
+              <p className="text-red-500 text-xs mt-1">{formErrors.new_product_qty}</p>
+            )}
           </div>
         )}
 
         {activeStep === 4 && (
           <div className="space-y-3">
-            {/* Show remaining boxes only if there are any */}
-            {remainingBoxes.length > 0 && (
-              <div className="mb-4">
-                <h3 className="text-base font-semibold">Boîtes Restantes dans le Camion</h3>
-                <table className="w-full text-sm border-collapse">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left p-1">Désignation</th>
-                      <th className="text-left p-1">Qté Restante</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {remainingBoxes.map((rb, index) => (
-                      <tr key={index} className="border-b">
-                        <td className="p-1">{boxes.find(b => b.id === parseInt(rb.box_id))?.designation || "N/A"}</td>
-                        <td className="p-1">{rb.qttOut || 0}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            <h3 className="text-base font-semibold">Nouvelles Boîtes</h3>
+            <h3 className="text-base font-semibold">Boîtes</h3>
             {formErrors.boxes && (
               <p className="text-red-500 text-sm">{formErrors.boxes}</p>
             )}
-            {formData.tripBoxes.map((box, index) => (
-              <div key={index} className="border p-3 rounded space-y-2">
-                <div>
-                  <Label className="text-sm font-medium">Boîte</Label>
-                  <select
-                    value={box.box_id}
-                    onChange={(e) => handleBoxChange(index, "box_id", e.target.value)}
-                    className={`w-full border rounded p-2 text-sm ${
-                      formErrors[`box_${index}_box_id`] ? "border-red-500" : "border-gray-300"
-                    }`}
-                    disabled={loading || index < remainingBoxes.length}
-                  >
-                    <option value="">Sélectionnez une boîte</option>
-                    {boxes.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.designation}
-                      </option>
-                    ))}
-                  </select>
-                  {formErrors[`box_${index}_box_id`] && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors[`box_${index}_box_id`]}</p>
-                  )}
-                </div>
-                <div>
-                  <Label className="text-sm font-medium">Qté Sortie</Label>
-                  <Input
-                    type="number"
-                    value={box.qttOut}
-                    onChange={(e) => handleBoxChange(index, "qttOut", e.target.value)}
-                    min="0"
-                    className={`text-sm ${
-                      formErrors[`box_${index}_qttOut`] ? "border-red-500" : "border-gray-300"
-                    }`}
-                    disabled={loading}
-                  />
-                  {formErrors[`box_${index}_qttOut`] && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors[`box_${index}_qttOut`]}</p>
-                  )}
-                </div>
-                {index >= remainingBoxes.length && (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => removeBox(index)}
-                    disabled={loading}
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left p-1">Désignation</th>
+                  <th className="text-left p-1">Qté</th>
+                </tr>
+              </thead>
+              <tbody>
+                {formData.tripBoxes.length === 0 ? (
+                  <tr>
+                    <td colSpan="2" className="p-1 text-center text-gray-500">
+                      Aucune boîte ajoutée
+                    </td>
+                  </tr>
+                ) : (
+                  formData.tripBoxes.map((box, index) => (
+                    <tr key={index} className="border-b">
+                      <td className="p-1">
+                        {boxes.find(b => b.id === parseInt(box.box_id))?.designation || "N/A"}
+                      </td>
+                      <td className="p-1">{box.qttOut}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+
+            <div className="flex items-end gap-2 mt-2">
+              <div className="flex-1">
+                <Label className="text-sm font-medium">Boîte</Label>
+                <select
+                  value={newBox.box_id}
+                  onChange={(e) => handleNewBoxChange("box_id", e.target.value)}
+                  className={`w-full border rounded p-2 text-sm ${
+                    formErrors.new_box_id ? "border-red-500" : "border-gray-300"
+                  }`}
+                  disabled={loading}
+                >
+                  <option value="">Sélectionnez une boîte</option>
+                  {boxes.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.designation}
+                    </option>
+                  ))}
+                </select>
+                {formErrors.new_box_id && (
+                  <p className="text-red-500 text-xs mt-1">{formErrors.new_box_id}</p>
                 )}
               </div>
-            ))}
-            <Button
-              onClick={addBox}
-              disabled={loading || boxes.length === 0}
-              className="w-full flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              Ajouter Boîte
-            </Button>
+              <div className="w-20">
+                <Label className="text-sm font-medium">Qté</Label>
+                <Input
+                  type="number"
+                  value={newBox.qttOut}
+                  onChange={(e) => handleNewBoxChange("qttOut", e.target.value)}
+                  min="0"
+                  className="text-sm"
+                  disabled={loading}
+                />
+              </div>
+              <Button
+                onClick={addBox}
+                disabled={loading}
+                className="h-10"
+              >
+                Ajouter
+              </Button>
+            </div>
+            {formErrors.new_box_qty && (
+              <p className="text-red-500 text-xs mt-1">{formErrors.new_box_qty}</p>
+            )}
           </div>
         )}
 
@@ -686,7 +672,7 @@ const StartTripForm = ({ open, onOpenChange, onTripStarted }) => {
               <p><strong>Zone:</strong></p>
               <p>{formData.zone}</p>
             </div>
-            {formData.tripProducts && formData.tripProducts.length > 0 && (
+            {formData.tripProducts.length > 0 && (
               <div className="mt-2">
                 <h4 className="text-md font-medium">Produits:</h4>
                 <table className="w-full text-sm border-collapse">
@@ -722,7 +708,7 @@ const StartTripForm = ({ open, onOpenChange, onTripStarted }) => {
                 </table>
               </div>
             )}
-            {formData.tripBoxes && formData.tripBoxes.length > 0 && (
+            {formData.tripBoxes.length > 0 && (
               <div className="mt-2">
                 <h4 className="text-md font-medium">Boîtes:</h4>
                 <table className="w-full text-sm border-collapse">
