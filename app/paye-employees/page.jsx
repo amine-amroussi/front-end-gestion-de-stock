@@ -376,6 +376,7 @@ const PaymentPage = () => {
               max="2100"
             />
           </div>
+          <div>|</div>
           <div className="flex gap-2">
             <input
               type="number"

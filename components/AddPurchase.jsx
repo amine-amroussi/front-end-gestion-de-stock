@@ -38,9 +38,9 @@ const AddPurchase = ({ open, setOpen, onPurchaseAdded }) => {
     const fetchOptions = async () => {
       try {
         const [productRes, boxRes, wasteRes] = await Promise.all([
-          axiosInstance.get("/product"), // Fetch products
-          axiosInstance.get("/box"), // Replace with your box endpoint
-          axiosInstance.get("/waste"), // Replace with your waste endpoint
+          axiosInstance.get("/trip/products/all"),
+          axiosInstance.get("/box"),
+          axiosInstance.get("/waste/all"), // Changed to /waste/all
         ]);
 
         const fetchedProducts =
@@ -55,17 +55,25 @@ const AddPurchase = ({ open, setOpen, onPurchaseAdded }) => {
         }
 
         setBoxes(boxRes.data.data?.boxes || boxRes.data.boxes || []);
-        setWasteProducts(
-          wasteRes.data.data?.wastes || wasteRes.data.wastes || []
+
+        const fetchedWastes =
+          wasteRes.data.waistes || wasteRes.data.wastes || []; // Handle typo
+        const inStockWastes = fetchedWastes.filter(
+          (waste) => parseFloat(waste.qtt) > 0
         );
+        if (inStockWastes.length === 0) {
+          ShowToast.info("Aucun déchet en stock disponible.");
+        }
+        setWasteProducts(inStockWastes);
       } catch (err) {
         console.error("Failed to fetch options:", err);
+        const errorMessage =
+          err.response?.data?.message ||
+          "Erreur lors du chargement des options";
         setFormErrors({
-          fetchProducts:
-            err.response?.data?.message ||
-            "Erreur lors du chargement des produits",
-          fetch: "Erreur lors du chargement des options",
+          fetch: errorMessage,
         });
+        ShowToast.error(errorMessage);
       }
     };
     fetchOptions();
@@ -141,6 +149,15 @@ const AddPurchase = ({ open, setOpen, onPurchaseAdded }) => {
   const updateWaste = (index, field, value) => {
     const updatedWaste = [...purchaseInfo.purchaseWaste];
     updatedWaste[index] = { ...updatedWaste[index], [field]: value };
+    if (field === "product_id" && value) {
+      const selectedWaste = wasteProducts.find(
+        (w) => `${w.product}-${w.type}` === value
+      );
+      if (selectedWaste) {
+        updatedWaste[index].product_id = selectedWaste.product;
+        updatedWaste[index].type = selectedWaste.type;
+      }
+    }
     setPurchaseInfo({ ...purchaseInfo, purchaseWaste: updatedWaste });
     setFormErrors({ ...formErrors, [`waste_${index}_${field}`]: "" });
   };
@@ -170,17 +187,18 @@ const AddPurchase = ({ open, setOpen, onPurchaseAdded }) => {
 
   // Submit purchase
   const handleSubmit = async () => {
-  try {
-    await createPurchase(purchaseInfo);
-    cancel();
-    if (onPurchaseAdded) onPurchaseAdded();
-  } catch (err) {
-    console.error("Failed to create purchase:", err);
-    const errorMessage = err.response?.data?.message || "Erreur lors de l'ajout de l'achat";
-    setFormErrors({ submit: errorMessage });
-    ShowToast.error(errorMessage); // Add toast notification for error
-  }
-};
+    try {
+      await createPurchase(purchaseInfo);
+      cancel();
+      if (onPurchaseAdded) onPurchaseAdded();
+    } catch (err) {
+      console.error("Failed to create purchase:", err);
+      const errorMessage =
+        err.response?.data?.message || "Erreur lors de l'ajout de l'achat";
+      setFormErrors({ submit: errorMessage });
+      ShowToast.error(errorMessage);
+    }
+  };
 
   // Validate steps
   const validateStep = () => {
@@ -218,9 +236,15 @@ const AddPurchase = ({ open, setOpen, onPurchaseAdded }) => {
       }
     } else if (step === 4 && purchaseInfo.purchaseWaste.length > 0) {
       purchaseInfo.purchaseWaste.forEach((w, i) => {
-        if (!w.product_id) errors[`waste_${i}_product_id`] = "Produit requis";
+        if (!w.product_id) errors[`waste_${i}_product_id`] = "Déchet requis";
         if (w.qtt <= 0) errors[`waste_${i}_qtt`] = "Quantité positive requise";
         if (!w.type) errors[`waste_${i}_type`] = "Type requis";
+        const selectedWaste = wasteProducts.find(
+          (waste) => waste.product === parseInt(w.product_id) && waste.type === w.type
+        );
+        if (selectedWaste && w.qtt > parseFloat(selectedWaste.qtt)) {
+          errors[`waste_${i}_qtt`] = `Quantité dépasse le stock disponible (${selectedWaste.qtt})`;
+        }
       });
     }
     setFormErrors(errors);
@@ -569,12 +593,17 @@ const AddPurchase = ({ open, setOpen, onPurchaseAdded }) => {
         {/* Step 4: Waste */}
         {step === 4 && (
           <div className="space-y-3">
+            {wasteProducts.length === 0 && (
+              <p className="text-gray-500 text-sm">
+                Aucun déchet en stock disponible.
+              </p>
+            )}
             {purchaseInfo.purchaseWaste.map((waste, index) => (
               <div key={index} className="border p-3 rounded space-y-2">
                 <div>
-                  <Label className="text-sm font-medium">Produit Déchet</Label>
+                  <Label className="text-sm font-medium">Déchet</Label>
                   <select
-                    value={waste.product_id}
+                    value={`${waste.product_id}-${waste.type}`}
                     onChange={(e) =>
                       updateWaste(index, "product_id", e.target.value)
                     }
@@ -585,12 +614,17 @@ const AddPurchase = ({ open, setOpen, onPurchaseAdded }) => {
                     }`}
                     disabled={loadingPurchase}
                   >
-                    <option value="">Sélectionnez un produit</option>
-                    {products.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.designation}
-                      </option>
-                    ))}
+                    <option value="">Sélectionnez un déchet</option>
+                    {wasteProducts.map((w) => {
+                      const product = products.find(
+                        (p) => p.id === parseInt(w.product)
+                      );
+                      return (
+                        <option key={`${w.product}-${w.type}`} value={`${w.product}-${w.type}`}>
+                          {product?.designation || "N/A"} ({w.type}) - Stock: {w.qtt}
+                        </option>
+                      );
+                    })}
                   </select>
                   {formErrors[`waste_${index}_product_id`] && (
                     <p className="text-red-500 text-xs mt-1">
@@ -598,51 +632,27 @@ const AddPurchase = ({ open, setOpen, onPurchaseAdded }) => {
                     </p>
                   )}
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <Label className="text-sm font-medium">Quantité</Label>
-                    <Input
-                      type="number"
-                      value={waste.qtt}
-                      onChange={(e) =>
-                        updateWaste(index, "qtt", parseInt(e.target.value) || 0)
-                      }
-                      min="0"
-                      className={`text-sm ${
-                        formErrors[`waste_${index}_qtt`]
-                          ? "border-red-500"
-                          : "border-gray-300"
-                      }`}
-                      disabled={loadingPurchase}
-                    />
-                    {formErrors[`waste_${index}_qtt`] && (
-                      <p className="text-red-500 text-xs mt-1">
-                        {formErrors[`waste_${index}_qtt`]}
-                      </p>
-                    )}
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium">Type</Label>
-                    <Input
-                      type="text"
-                      value={waste.type}
-                      onChange={(e) =>
-                        updateWaste(index, "type", e.target.value)
-                      }
-                      placeholder="ex. Damaged"
-                      className={`text-sm ${
-                        formErrors[`waste_${index}_type`]
-                          ? "border-red-500"
-                          : "border-gray-300"
-                      }`}
-                      disabled={loadingPurchase}
-                    />
-                    {formErrors[`waste_${index}_type`] && (
-                      <p className="text-red-500 text-xs mt-1">
-                        {formErrors[`waste_${index}_type`]}
-                      </p>
-                    )}
-                  </div>
+                <div>
+                  <Label className="text-sm font-medium">Quantité</Label>
+                  <Input
+                    type="number"
+                    value={waste.qtt}
+                    onChange={(e) =>
+                      updateWaste(index, "qtt", parseInt(e.target.value) || 0)
+                    }
+                    min="0"
+                    className={`text-sm ${
+                      formErrors[`waste_${index}_qtt`]
+                        ? "border-red-500"
+                        : "border-gray-300"
+                    }`}
+                    disabled={loadingPurchase}
+                  />
+                  {formErrors[`waste_${index}_qtt`] && (
+                    <p className="text-red-500 text-xs mt-1">
+                      {formErrors[`waste_${index}_qtt`]}
+                    </p>
+                  )}
                 </div>
                 <Button
                   variant="destructive"
@@ -656,7 +666,7 @@ const AddPurchase = ({ open, setOpen, onPurchaseAdded }) => {
             ))}
             <Button
               onClick={addWaste}
-              disabled={loadingPurchase || products.length === 0}
+              disabled={loadingPurchase || wasteProducts.length === 0}
               className="w-full flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
@@ -702,7 +712,7 @@ const AddPurchase = ({ open, setOpen, onPurchaseAdded }) => {
                       const product = products.find(
                         (pr) => pr.id === parseInt(p.product_id)
                       );
-                      const capacityByBox = product?.capacityByBox || 0; // Default to 0 if not found
+                      const capacityByBox = product?.capacityByBox || 0;
                       const totalUnits = p.qtt * capacityByBox + p.qttUnite;
                       const totalAmount = totalUnits * p.price;
                       return (
@@ -863,4 +873,4 @@ const AddPurchase = ({ open, setOpen, onPurchaseAdded }) => {
   );
 };
 
-export default AddPurchase; 
+export default AddPurchase;

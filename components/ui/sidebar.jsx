@@ -3,6 +3,8 @@ import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
 import { cva } from "class-variance-authority";
 import { PanelLeftIcon } from "lucide-react"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
@@ -33,6 +35,7 @@ const SIDEBAR_KEYBOARD_SHORTCUT = "b"
 
 const SidebarContext = React.createContext(null)
 
+
 function useSidebar() {
   const context = React.useContext(SidebarContext)
   if (!context) {
@@ -41,6 +44,7 @@ function useSidebar() {
 
   return context
 }
+const queryClient = new QueryClient();
 
 function SidebarProvider({
   defaultOpen = true,
@@ -51,6 +55,7 @@ function SidebarProvider({
   children,
   ...props
 }) {
+
   const isMobile = useIsMobile()
   const [openMobile, setOpenMobile] = React.useState(false)
 
@@ -122,7 +127,10 @@ function SidebarProvider({
             className
           )}
           {...props}>
+
+        <QueryClientProvider client={queryClient}>
           {children}
+</QueryClientProvider>
         </div>
       </TooltipProvider>
     </SidebarContext.Provider>
@@ -148,7 +156,9 @@ function Sidebar({
           className
         )}
         {...props}>
-        {children}
+        <QueryClientProvider client={QueryClient}>
+          {children}
+        </QueryClientProvider>
       </div>
     );
   }

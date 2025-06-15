@@ -130,9 +130,15 @@ const PaymentForm = ({ onClose, initialData = null }) => {
               className="w-full border rounded-md p-2 text-sm"
               disabled={loading}
             >
-              <option value="Pending">En attente</option>
-              <option value="Paid">Payé</option>
-              <option value="Cancelled">Annulé</option>
+              {initialData ? (
+                <>
+                  <option value="Pending">En attente</option>
+                  <option value="Paid">Payé</option>
+                  <option value="Cancelled">Annulé</option>
+                </>
+              ) : (
+                <option value="Pending">En attente</option>
+              )}
             </select>
           </div>
         </div>

@@ -93,31 +93,31 @@ export const useTrip = create((set, get) => ({
     }
   },
   fetchTripById: async (tripId) => {
-    try {
-      const parsedTripId = parseInt(tripId, 10);
-      console.log("Fetching trip by ID:", parsedTripId);
-      if (isNaN(parsedTripId)) {
-        throw new Error("ID de tournée invalide");
-      }
-      console.log(`Requesting /trip/${parsedTripId}`);
-      const response = await axiosInstance.get(`/trip/${parsedTripId}`);
-      console.log("fetchTripById response:", response.data);
-      if (!response.data.trip) {
-        throw new Error("No trip data returned in response");
-      }
-      return response.data.trip;
-    } catch (error) {
-      const errorMessage = error.response?.data?.message || error.message || "Erreur lors de la récupération de la tournée par ID.";
-      console.error("fetchTripById error:", {
-        message: errorMessage,
-        status: error.response?.status,
-        data: error.response?.data,
-        stack: error.stack,
-      });
-      toast.error(errorMessage);
-      throw new Error(errorMessage);
+  try {
+    const parsedTripId = parseInt(tripId, 10);
+    console.log("Fetching trip by ID:", parsedTripId);
+    if (isNaN(parsedTripId)) {
+      throw new Error("ID de tournée invalide");
     }
-  },
+    console.log(`Requesting /trip/${parsedTripId}`);
+    const response = await axiosInstance.get(`/trip/${parsedTripId}`);
+    console.log("fetchTripById response:", JSON.stringify(response.data.trip, null, 2));
+    if (!response.data.trip) {
+      throw new Error("No trip data returned in response");
+    }
+    return response.data.trip;
+  } catch (error) {
+    const errorMessage = error.response?.data?.message || error.message || "Erreur lors de la récupération de la tournée par ID.";
+    console.error("fetchTripById error:", {
+      message: errorMessage,
+      status: error.response?.status,
+      data: error.response?.data,
+      stack: error.stack,
+    });
+    toast.error(errorMessage);
+    throw new Error(errorMessage);
+  }
+},
   startTrip: async (tripData) => {
     try {
       console.log("Sending startTrip request with data:", tripData);
@@ -282,4 +282,4 @@ export const useTrip = create((set, get) => ({
       toast.error(errorMessage);
     }
   },
-}));
+}));  
