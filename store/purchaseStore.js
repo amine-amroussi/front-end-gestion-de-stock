@@ -1,90 +1,161 @@
 import { create } from "zustand";
-import { toast } from "sonner";
 import { axiosInstance } from "@/utils/axiosInstance";
+import { ShowToast } from "@/utils/toast"; // Import the toast utility
 
-export const usePurchase = create((set) => ({
+export const usePurchase = create((set, get) => ({
   purchaseState: {
     purchases: [],
+    selectedPurchase: null,
     loadingPurchase: false,
-    purchasNames: [],
     error: null,
     pagination: {
       totalItems: 0,
-      totalPages: 1,
+      totalPages: 0,
       currentPage: 1,
       pageSize: 10,
     },
   },
-  fetchAllPurchases: async (page = 1, limit = 10, filters = {}) => {
-    set((state) => ({
-      purchaseState: {
-        ...state.purchaseState,
-        loadingPurchase: true,
-        error: null,
-      },
-    }));
+  fetchAllPurchases: async (page = 1, limit = 10) => {
+    const toastId = ShowToast.loading("Chargement des achats...");
     try {
-      const params = {
-        page,
-        limit,
-        ...(filters.startDate && { startDate: filters.startDate }),
-        ...(filters.endDate && { endDate: filters.endDate }),
-        ...(filters.minTotal && { minTotal: filters.minTotal }),
-        ...(filters.maxTotal && { maxTotal: filters.maxTotal }),
-        ...(filters.search && { search: filters.search }),
-      };
-      console.log("fetchAllPurchases params:", JSON.stringify(params, null, 2));
-      const response = await axiosInstance.get("/purchase", { params });
-      console.log("fetchAllPurchases response:", JSON.stringify(response.data, null, 2));
+      set((state) => ({
+        purchaseState: { ...state.purchaseState, loadingPurchase: true, error: null },
+      }));
 
-      const { purchases, pagination, WastesArray } = response.data.data;
-
-      // Ensure purchases include WastesArray
-      const updatedPurchases = purchases.map((purchase) => {
-        const wasteData = WastesArray.find((w) => w.purchaseId === purchase.id);
-        return {
-          ...purchase,
-          WastesArray: wasteData || { purchaseId: purchase.id, details: [] },
-        };
+      const response = await axiosInstance.get(`/purchase`, {
+        params: { page, limit },
       });
 
+      if (response.status === 200) {
+        const data = response.data;
+        set((state) => ({
+          purchaseState: {
+            ...state.purchaseState,
+            purchases: data.data.purchases,
+            pagination: data.data.pagination,
+            loadingPurchase: false,
+          },
+        }));
+        ShowToast.dismiss(toastId);
+        ShowToast.successAdd("Achats chargés");
+      }
+    } catch (error) {
+      const errorMessage = error.response?.data?.message || "Échec du chargement des achats";
       set((state) => ({
         purchaseState: {
           ...state.purchaseState,
-          purchases: updatedPurchases,
-          pagination,
           loadingPurchase: false,
+          error: errorMessage,
         },
       }));
+      ShowToast.dismiss(toastId);
+      ShowToast.error(errorMessage);
+      console.error("Fetch purchases error:", error);
+    }
+  },
+  fetchPurchase: async (id) => {
+    const toastId = ShowToast.loading("Chargement de l'achat...");
+    try {
+      set((state) => ({
+        purchaseState: { ...state.purchaseState, loadingPurchase: true, error: null },
+      }));
+
+      const response = await axiosInstance.get(`/purchase/${id}`);
+
+      if (response.status === 200) {
+        const data = response.data;
+        set((state) => ({
+          purchaseState: {
+            ...state.purchaseState,
+            selectedPurchase: data.data.purchase,
+            loadingPurchase: false,
+          },
+        }));
+        ShowToast.dismiss(toastId);
+        ShowToast.successAdd("Achat chargé");
+      }
     } catch (error) {
-      const errorMessage =
-        error.response?.data?.msg || "Failed to fetch purchases";
-      console.error("fetchAllPurchases error:", {
-        message: errorMessage,
-        status: error.response?.status,
-        response: error.response?.data,
-      });
+      const errorMessage = error.response?.data?.message || "Échec du chargement de l'achat";
+      set((state) => ({
+        purchaseState: {
+          ...state.purchaseState,
+          loadingPurchase: false,
+          error: errorMessage,
+        },
+      }));
+      ShowToast.dismiss(toastId);
+      ShowToast.error(errorMessage);
+      console.error("Fetch purchase error:", error);
+    }
+  },
+  createPurchase: async (purchaseInfo) => {
+    const toastId = ShowToast.loading("Ajout de l'achat...");
+    try {
+      set((state) => ({
+        purchaseState: { ...state.purchaseState, loadingPurchase: true, error: null },
+      }));
+
+      const response = await axiosInstance.post("/purchase", purchaseInfo);
+
+      if (response.status === 201) {
+        await get().fetchAllPurchases(
+          get().purchaseState.pagination.currentPage,
+          get().purchaseState.pagination.pageSize
+        );
+        set((state) => ({
+          purchaseState: {
+            ...state.purchaseState,
+            loadingPurchase: false,
+          },
+        }));
+        ShowToast.dismiss(toastId);
+        ShowToast.successAdd("Achat");
+      }
+    } catch (error) {
+      const errorMessage = error.response?.data?.message || "Échec de la création de l'achat";
+      set((state) => ({
+        purchaseState: {
+          ...state.purchaseState,
+          loadingPurchase: false,
+          error: errorMessage,
+        },
+      }));
+      ShowToast.dismiss(toastId);
+      ShowToast.error(errorMessage);
+      console.error("Create purchase error:", error);
+    }
+  },
+  nextPage: async () => {
+    const toastId = ShowToast.loading("Chargement de la page suivante...");
+    try {
+      const currentPage = get().purchaseState.pagination.currentPage;
+      const totalPages = get().purchaseState.pagination.totalPages;
+      const nextPage = currentPage + 1;
+      if (nextPage <= totalPages) {
+        set((state) => ({
+          purchaseState: {
+            ...state.purchaseState,
+            pagination: { ...state.purchaseState.pagination, currentPage: nextPage },
+          },
+        }));
+        await get().fetchAllPurchases(nextPage, get().purchaseState.pagination.pageSize);
+        ShowToast.dismiss(toastId);
+        ShowToast.successAdd("Page suivante chargée");
+      } else {
+        ShowToast.dismiss(toastId);
+        ShowToast.error("Aucune page suivante disponible");
+      }
+    } catch (error) {
+      const errorMessage = error.response?.data?.message || "Échec du chargement de la page suivante";
       set((state) => ({
         purchaseState: {
           ...state.purchaseState,
           error: errorMessage,
-          loadingPurchase: false,
         },
       }));
-      toast.error(errorMessage);
+      ShowToast.dismiss(toastId);
+      ShowToast.error(errorMessage);
+      console.error("Next page error:", error);
     }
-  },
-
-  nextPage: async () => {
-    set((state) => {
-      const nextPage = state.purchaseState.pagination.currentPage + 1;
-      if (nextPage <= state.purchaseState.pagination.totalPages) {
-        state.fetchAllPurchases(
-          nextPage,
-          state.purchaseState.pagination.pageSize
-        );
-      }
-      return state;
-    });
   },
 }));

@@ -192,6 +192,8 @@ const AddPurchase = ({ open, setOpen, onPurchaseAdded }) => {
       cancel();
       if (onPurchaseAdded) onPurchaseAdded();
     } catch (err) {
+      console.log(error);
+      
       console.error("Failed to create purchase:", err);
       const errorMessage =
         err.response?.data?.message || "Erreur lors de l'ajout de l'achat";
