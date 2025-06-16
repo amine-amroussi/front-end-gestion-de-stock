@@ -1,16 +1,20 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { usePaymentStore } from "@/store/PaymentStore";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ChevronLeft, ChevronRight, Plus, Printer, Download } from "lucide-react";
+import { toast } from "sonner";
+import { format } from "date-fns";
+import { jsPDF } from "jspdf";
+import { axiosInstance } from "@/utils/axiosInstance";
 import PaymentForm from "@/components/PaymentForm";
 import PaymentSummary from "@/components/PaymentSummary";
-import { Button } from "@/components/ui/button";
-import { Plus, ChevronRight, Printer } from "lucide-react";
-import { format } from "date-fns";
-import { toast } from "sonner";
 
 const PaymentPage = () => {
   const {
-    state,
+    state: { payments, pagination, filters, sort, employees, loading, tripTotals },
     fetchPayments,
     fetchEmployees,
     fetchPaymentsForEmployeeBetweenDates,
@@ -19,9 +23,8 @@ const PaymentPage = () => {
     goToNextPage,
   } = usePaymentStore();
 
-  const { payments, employees, loading, error, pagination, filters, sort } = state;
-  const [showForm, setShowForm] = useState(false);
-  const [editingPayment, setEditingPayment] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedPayment, setSelectedPayment] = useState(null);
   const [invoiceForm, setInvoiceForm] = useState({
     employeeId: "",
     startMonth: "",
@@ -33,31 +36,48 @@ const PaymentPage = () => {
   useEffect(() => {
     fetchEmployees();
     fetchPayments(pagination.currentPage, pagination.pageSize, filters, sort);
-  }, [fetchEmployees, fetchPayments, pagination.currentPage, filters, sort]);
+  }, [pagination.currentPage, pagination.pageSize, filters, sort]);
 
-  const handleFilterChange = (e) => {
-    const { name, value } = e.target;
-    setFilters({ [name]: value });
+  const handleFilterChange = (key, value) => {
+    const filterValue = value === "all" ? "" : value;
+    setFilters({ [key]: filterValue });
+    fetchPayments(1, pagination.pageSize, { ...filters, [key]: filterValue }, sort);
   };
 
-  const handleSortChange = (field) => {
-    setSort({
-      sortBy: field,
-      sortOrder: sort.sortBy === field && sort.sortOrder === "ASC" ? "DESC" : "ASC",
-    });
+  const handleSortChange = (sortBy) => {
+    const newSortOrder = sort.sortBy === sortBy && sort.sortOrder === "ASC" ? "DESC" : "ASC";
+    setSort({ sortBy, sortOrder: newSortOrder });
+    fetchPayments(1, pagination.pageSize, filters, { sortBy, sortOrder: newSortOrder });
   };
 
-  const handleAddPayment = () => {
-    if (!Array.isArray(employees) || employees.length === 0) {
-      toast.error("Veuillez attendre que les employés soient chargés.");
+  const handlePageChange = (page) => {
+    fetchPayments(page, pagination.pageSize, filters, sort);
+  };
+
+  const openModal = (payment = null) => {
+    if (employees.length === 0 && !loading) {
+      toast.error("Aucun employé disponible. Veuillez vérifier la connexion au serveur.");
       return;
     }
-    setShowForm(true);
+    setSelectedPayment(payment);
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setSelectedPayment(null);
   };
 
   const getEmployeeName = (cin) => {
     const employee = employees.find((emp) => emp.cin === cin?.toString());
     return employee ? employee.name : "N/A";
+  };
+
+  const calculateNetPay = (payment) => {
+    const total = parseFloat(payment.total || 0);
+    const credit = parseFloat(payment.credit || 0);
+    const commission = parseFloat(tripTotals[payment.payment_id]?.commission || 0);
+    return (total - credit + commission).toFixed(2);
   };
 
   const handleInvoiceFormChange = (e) => {
@@ -110,32 +130,23 @@ const PaymentPage = () => {
       endY
     );
 
-    if (state.error) {
-      toast.error(`Erreur: ${state.error}`);
-      return;
-    }
-
     if (!paymentsInRange || paymentsInRange.length === 0) {
       toast.error("Aucun paiement trouvé pour cet employé dans cette période.");
       return;
     }
 
-    // Calcul des totaux basés sur les données du backend
     const totalBase = paymentsInRange
       .reduce((sum, p) => sum + parseFloat(p.total || 0), 0)
       .toFixed(2);
     const totalCredit = paymentsInRange
       .reduce((sum, p) => sum + parseFloat(p.credit || 0), 0)
       .toFixed(2);
-    const totalNet = paymentsInRange
-      .reduce((sum, p) => sum + parseFloat(p.net_pay || 0), 0)
+    const totalCommission = paymentsInRange
+      .reduce((sum, p) => sum + parseFloat(tripTotals[p.payment_id]?.commission || 0), 0)
       .toFixed(2);
-
-    // Vérification que le totalNet correspond à totalBase - totalCredit (pour débogage)
-    const calculatedNet = (parseFloat(totalBase) - parseFloat(totalCredit)).toFixed(2);
-    if (parseFloat(totalNet) !== parseFloat(calculatedNet)) {
-      console.warn("Mismatch in net calculation:", { totalNet, calculatedNet });
-    }
+    const totalNet = paymentsInRange
+      .reduce((sum, p) => sum + parseFloat(calculateNetPay(p)), 0)
+      .toFixed(2);
 
     const currentDate = format(new Date(), "dd/MM/yyyy HH:mm");
 
@@ -177,27 +188,32 @@ const PaymentPage = () => {
                 <tr>
                   <th>Période</th>
                   <th>Salaire de Base (MAD)</th>
-                  <th>Ajustement de Crédit (MAD)</th>
+                  <th>Commission (MAD)</th>
+                  <th>Crédit (MAD)</th>
                   <th>Total Net (MAD)</th>
                   <th>Statut</th>
                 </tr>
               </thead>
               <tbody>
-                ${
-                  paymentsInRange.map((payment) => `
+                ${paymentsInRange
+                  .map(
+                    (payment) => `
                     <tr>
                       <td>${payment.month}/${payment.year}</td>
                       <td>${parseFloat(payment.total || 0).toFixed(2)}</td>
-                      <td>${parseFloat(payment.credit || 0).toFixed(2)}</td>
-                      <td>${parseFloat(payment.net_pay || 0).toFixed(2)}</td>
+                      <td>${parseFloat(tripTotals[payment.payment_id]?.commission || 0).toFixed(2)}</td>
+                      <td>-${parseFloat(payment.credit || 0).toFixed(2)}</td>
+                      <td>${calculateNetPay(payment)}</td>
                       <td>${payment.status === "Paid" ? "Payé" : payment.status === "Cancelled" ? "Annulé" : "En attente"}</td>
                     </tr>
-                  `).join("")
-                }
+                  `
+                  )
+                  .join("")}
                 <tr>
                   <td><strong>Total</strong></td>
                   <td><strong>${totalBase}</strong></td>
-                  <td><strong>${totalCredit}</strong></td>
+                  <td><strong>${totalCommission}</strong></td>
+                  <td><strong>-${totalCredit}</strong></td>
                   <td><strong>${totalNet}</strong></td>
                   <td></td>
                 </tr>
@@ -225,14 +241,12 @@ const PaymentPage = () => {
       printWindow.document.write(invoiceContent);
       printWindow.document.close();
     } else {
-      console.error("Failed to open print window. Please allow popups for this site.");
       toast.error("Impossible d'ouvrir la fenêtre d'impression. Veuillez autoriser les popups pour ce site.");
     }
   };
 
   const handlePrintInvoice = (payment) => {
     const currentDate = format(new Date(), "dd/MM/yyyy HH:mm");
-    const isPreOrActiveTrip = false;
 
     const invoiceContent = `
       <html>
@@ -281,18 +295,22 @@ const PaymentPage = () => {
                   <td>${parseFloat(payment.total || 0).toFixed(2)}</td>
                 </tr>
                 <tr>
-                  <td>Ajustement de Crédit</td>
-                  <td>${parseFloat(payment.credit || 0).toFixed(2)}</td>
+                  <td>Commission</td>
+                  <td>${parseFloat(tripTotals[payment.payment_id]?.commission || 0).toFixed(2)}</td>
+                </tr>
+                <tr>
+                  <td>Crédit</td>
+                  <td>-${parseFloat(payment.credit || 0).toFixed(2)}</td>
                 </tr>
                 <tr>
                   <td><strong>Total Net</strong></td>
-                  <td><strong>${parseFloat(payment.net_pay || 0).toFixed(2)}</strong></td>
+                  <td><strong>${calculateNetPay(payment)}</strong></td>
                 </tr>
               </tbody>
             </table>
           </div>
           <div class="total">
-            <p><strong>Montant Total:</strong> ${parseFloat(payment.net_pay || 0).toFixed(2)} MAD</p>
+            <p><strong>Montant Total:</strong> ${calculateNetPay(payment)} MAD</p>
           </div>
           <div class="footer">
             <p>Merci pour votre confiance !</p>
@@ -312,27 +330,47 @@ const PaymentPage = () => {
       printWindow.document.write(invoiceContent);
       printWindow.document.close();
     } else {
-      console.error("Failed to open print window. Please allow popups for this site.");
       toast.error("Impossible d'ouvrir la fenêtre d'impression. Veuillez autoriser les popups pour ce site.");
     }
   };
 
-  const handleEditPayment = (payment) => {
-    setEditingPayment(payment);
-    setShowForm(true);
+  const handleGenerateInvoice = async (paymentId) => {
+    try {
+      const response = await axiosInstance.get(`/payment/${paymentId}`);
+      if (response.status !== 200) {
+        throw new Error("Failed to fetch payment details");
+      }
+      const payment = response.data.payment;
+
+      const doc = new jsPDF();
+      doc.setFontSize(16);
+      doc.text("Facture de Paiement", 20, 20);
+      doc.setFontSize(12);
+      doc.text(`ID Paiement: ${payment.payment_id}`, 20, 40);
+      doc.text(`Employé: ${payment.EmployeeAssociation?.name || "N/A"} (${payment.EmployeeAssociation?.cin || "N/A"})`, 20, 50);
+      doc.text(`Mois: ${payment.month}`, 20, 60);
+      doc.text(`Année: ${payment.year}`, 20, 70);
+      doc.text(`Salaire de Base: ${parseFloat(payment.total || 0).toFixed(2)} MAD`, 20, 80);
+      doc.text(`Commission: ${parseFloat(tripTotals[payment.payment_id]?.commission || 0).toFixed(2)} MAD`, 20, 90);
+      doc.text(`Crédit: -${parseFloat(payment.credit || 0).toFixed(2)} MAD`, 20, 100);
+      doc.text(`Net à payer: ${calculateNetPay(payment)} MAD`, 20, 110);
+      doc.text(`Statut: ${payment.status}`, 20, 120);
+      doc.text(`Date de génération: ${new Date().toLocaleDateString("fr-FR")}`, 20, 130);
+
+      doc.save(`invoice_payment_${paymentId}.pdf`);
+      toast.success("Facture générée avec succès !");
+    } catch (error) {
+      console.error("Error generating invoice:", error);
+      toast.error(error.message || "Erreur lors de la génération de la facture.");
+    }
   };
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-800">Gestion des Paiements des Employés</h1>
-        <Button
-          onClick={handleAddPayment}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
-          disabled={loading}
-        >
-          <Plus className="w-5 h-5" />
-          Ajouter Paiement
+        <h1 className="text-3xl font-bold text-gray-800">Gestion des Paiements</h1>
+        <Button onClick={() => openModal()} disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white">
+          <Plus className="w-4 h-4 mr-2" /> Ajouter Paiement
         </Button>
       </div>
 
@@ -355,46 +393,46 @@ const PaymentPage = () => {
             ))}
           </select>
           <div className="flex gap-2">
-            <input
+            <Input
               type="number"
               name="startMonth"
               value={invoiceForm.startMonth}
               onChange={handleInvoiceFormChange}
               placeholder="Mois de Début (1-12)"
-              className="p-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="p-2 text-sm"
               min="1"
               max="12"
             />
-            <input
+            <Input
               type="number"
               name="startYear"
               value={invoiceForm.startYear}
               onChange={handleInvoiceFormChange}
               placeholder="Année de Début"
-              className="p-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="p-2 text-sm"
               min="2000"
               max="2100"
             />
           </div>
           <div>|</div>
           <div className="flex gap-2">
-            <input
+            <Input
               type="number"
               name="endMonth"
               value={invoiceForm.endMonth}
               onChange={handleInvoiceFormChange}
               placeholder="Mois de Fin (1-12)"
-              className="p-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="p-2 text-sm"
               min="1"
               max="12"
             />
-            <input
+            <Input
               type="number"
               name="endYear"
               value={invoiceForm.endYear}
               onChange={handleInvoiceFormChange}
               placeholder="Année de Fin"
-              className="p-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="p-2 text-sm"
               min="2000"
               max="2100"
             />
@@ -408,150 +446,167 @@ const PaymentPage = () => {
         </div>
       </div>
 
-      {error && <p className="text-red-600 mb-4">{error}</p>}
-
-      <div className="mb-6 flex flex-col md:flex-row gap-4">
-        <div className="flex-1">
-          <input
-            type="text"
-            name="search"
-            value={filters.search || ""}
-            onChange={handleFilterChange}
-            placeholder="Rechercher par nom ou CIN..."
-            className="w-full p-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+      <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label className="block text-sm font-medium mb-1">Rechercher</label>
+          <Input
+            placeholder="Rechercher par nom ou CIN"
+            value={filters.search}
+            onChange={(e) => handleFilterChange("search", e.target.value)}
+            className="w-full"
           />
         </div>
         <div>
-          <select
-            name="status"
-            value={filters.status || ""}
-            onChange={handleFilterChange}
-            className="p-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          <label className="block text-sm font-medium mb-1">Statut</label>
+          <Select
+            value={filters.status || "all"}
+            onValueChange={(value) => handleFilterChange("status", value)}
           >
-            <option value="">Tous les statuts</option>
-            <option value="Pending">En attente</option>
-            <option value="Paid">Payé</option>
-            <option value="Cancelled">Annulé</option>
-          </select>
+            <SelectTrigger>
+              <SelectValue placeholder="Tous les statuts" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tous</SelectItem>
+              <SelectItem value="Pending">En attente</SelectItem>
+              <SelectItem value="Paid">Payé</SelectItem>
+              <SelectItem value="Cancelled">Annulé</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
-      {loading ? (
-        <p className="text-gray-600">Chargement...</p>
-      ) : !Array.isArray(payments) || payments.length === 0 ? (
-        <p className="text-gray-600">Aucun paiement trouvé.</p>
-      ) : (
-        <>
-          <div className="overflow-x-auto rounded-lg shadow">
-            <table className="w-full text-sm text-left border-collapse">
-              <thead className="bg-gray-100">
-                <tr>
-                  {["ID", "Employé", "Mois/Année", "Salaire de Base", "Crédit", "Paiement Net", "Statut", "Actions"].map(
-                    (header) => (
-                      <th
-                        key={header}
-                        className="p-3 cursor-pointer hover:bg-gray-200"
-                        onClick={() =>
-                          handleSortChange(
-                            header === "ID"
-                              ? "payment_id"
-                              : header === "Mois/Année"
-                              ? "year"
-                              : header.toLowerCase().replace(" ", "_")
-                          )
-                        }
-                      >
-                        {header}{" "}
-                        {sort.sortBy ===
-                          (header === "ID"
-                            ? "payment_id"
-                            : header === "Mois/Année"
-                            ? "year"
-                            : header.toLowerCase().replace(" ", "_")) && (
-                          <span>{sort.sortOrder === "ASC" ? "↑" : "↓"}</span>
-                        )}
-                      </th>
-                    )
+      <div className="bg-white rounded-lg shadow overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              {[
+                { label: "Employé", key: "employee" },
+                { label: "Mois", key: "month" },
+                { label: "Année", key: "year" },
+                { label: "Salaire de Base (MAD)", key: "total" },
+                { label: "Crédit (MAD)", key: "credit" },
+                { label: "Net à payer (MAD)", key: "net_pay" },
+                { label: "Total Tournées (MAD)", key: "total_trips" },
+                { label: "Commission (MAD)", key: "commission" },
+                { label: "Statut", key: "status" },
+                { label: "Actions", key: "actions" },
+              ].map((header) => (
+                <th
+                  key={header.key}
+                  onClick={() => header.key !== "actions" && header.key !== "total_trips" && header.key !== "commission" && handleSortChange(header.key)}
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                >
+                  {header.label}
+                  {sort.sortBy === header.key && (
+                    <span>{sort.sortOrder === "ASC" ? " ▲" : " ▼"}</span>
                   )}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {loading ? (
+              <tr>
+                <td colSpan="10" className="px-6 py-4 text-center text-gray-500">
+                  Chargement...
+                </td>
+              </tr>
+            ) : payments.length === 0 ? (
+              <tr>
+                <td colSpan="10" className="px-6 py-4 text-center text-gray-500">
+                  Aucun paiement trouvé
+                </td>
+              </tr>
+            ) : (
+              payments.map((payment) => (
+                <tr key={payment.payment_id}>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {payment.EmployeeAssociation?.name || "N/A"} (
+                    {payment.EmployeeAssociation?.cin || "N/A"})
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">{payment.month}</td>
+                  <td className="px-6 py-4 whitespace-nowrap">{payment.year}</td>
+                  <td className="px-6 py-4 whitespace-nowrap">{parseFloat(payment.total || 0).toFixed(2)} MAD</td>
+                  <td className="px-6 py-4 whitespace-nowrap">{parseFloat(payment.credit || 0).toFixed(2)} MAD</td>
+                  <td className="px-6 py-4 whitespace-nowrap">{calculateNetPay(payment)} MAD</td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {parseFloat(tripTotals[payment.payment_id]?.totalWaitedAmount || 0).toFixed(2)} MAD
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {parseFloat(tripTotals[payment.payment_id]?.commission || 0).toFixed(2)} MAD
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span
+                      className={`px-2 py-1 rounded text-xs ${
+                        payment.status === "Paid"
+                          ? "bg-green-100 text-green-800"
+                          : payment.status === "Pending"
+                          ? "bg-yellow-100 text-yellow-800"
+                          : "bg-red-100 text-red-800"
+                      }`}
+                    >
+                      {payment.status}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap flex gap-2">
+                    {payment.status !== "Paid" && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openModal(payment)}
+                      >
+                        Modifier
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePrintInvoice(payment)}
+                    >
+                      <Printer className="w-4 h-4 mr-1" /> Imprimer
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleGenerateInvoice(payment.payment_id)}
+                    >
+                      <Download className="w-4 h-4 mr-1" /> PDF
+                    </Button>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {payments.map((payment) => (
-                  <tr key={payment.payment_id} className="border-b hover:bg-gray-50">
-                    <td className="p-3">{payment.payment_id}</td>
-                    <td className="p-3">
-                      {payment.EmployeeAssociation
-                        ? `${payment.EmployeeAssociation.name} (${payment.EmployeeAssociation.role})`
-                        : "N/A"}
-                    </td>
-                    <td className="p-3">{`${payment.month}/${payment.year}`}</td>
-                    <td className="p-3">{payment.total} MAD</td>
-                    <td className="p-3">{payment.credit} MAD</td>
-                    <td className="p-3">{payment.net_pay} MAD</td>
-                    <td className="p-3">
-                      <span
-                        className={`px-2 py-1 rounded text-xs ${
-                          payment.status === "Paid"
-                            ? "bg-green-100 text-green-800"
-                            : payment.status === "Cancelled"
-                            ? "bg-red-100 text-red-800"
-                            : "bg-yellow-100 text-yellow-800"
-                        }`}
-                      >
-                        {payment.status === "Paid"
-                          ? "Payé"
-                          : payment.status === "Cancelled"
-                          ? "Annulé"
-                          : "En attente"}
-                      </span>
-                    </td>
-                    <td className="p-3">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEditPayment(payment)}
-                        className="border-gray-300 hover:bg-gray-100 mr-2"
-                      >
-                        Modifier Statut
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handlePrintInvoice(payment)}
-                        className="border-gray-300 hover:bg-gray-100"
-                      >
-                        <Printer className="w-4 h-4" />
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="mt-4 flex justify-between items-center">
-            <p className="text-sm text-gray-600">
-              Page {pagination.currentPage} sur {pagination.totalPages}
-            </p>
-            <Button
-              onClick={goToNextPage}
-              disabled={pagination.currentPage >= pagination.totalPages}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
-            >
-              Suivant <ChevronRight className="w-5 h-5" />
-            </Button>
-          </div>
-        </>
-      )}
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
 
-      {showForm && (
-        <PaymentForm
-          onClose={() => {
-            setShowForm(false);
-            setEditingPayment(null);
-          }}
-          initialData={editingPayment}
-        />
-      )}
+      <div className="flex justify-between items-center mt-4">
+        <div>
+          <p className="text-sm text-gray-600">
+            Affichage de {payments.length} sur {pagination.totalItems} paiements
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={pagination.currentPage === 1}
+            onClick={() => handlePageChange(pagination.currentPage - 1)}
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={pagination.currentPage >= pagination.totalPages}
+            onClick={goToNextPage}
+          >
+            <ChevronRight className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+
+      {isModalOpen && <PaymentForm onClose={closeModal} initialData={selectedPayment} />}
     </div>
   );
 };

@@ -11,6 +11,7 @@ import {
   ArrowDownUp,
   Banknote,
   BookCopy,
+  Coins,
 } from "lucide-react";
 
 export const links = [
@@ -48,6 +49,11 @@ export const links = [
     name: "Les Achats",
     url: "/achats",
     icon: <TicketCheck  className="w-4 h-4"/>,
+  },
+  {
+    name: "Les Charges",
+    url: "/charges",
+    icon: <Coins  className="w-4 h-4"/>,
   },
   {
     name: "Les Pertes",

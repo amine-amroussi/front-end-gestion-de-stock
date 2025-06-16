@@ -29,6 +29,8 @@ export const useBox = create((set, get) => ({
     }
   },
   createBox: async (boxInfo) => {
+    console.log(boxInfo);
+    
     const toastId = ShowToast.loading("Ajout d'une caisse...");
     try {
       set((state) => ({ boxState: { ...state.boxState, lodingBox: true } }));

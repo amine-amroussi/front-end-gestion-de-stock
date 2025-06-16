@@ -39,9 +39,12 @@ const AddBoxWastePurchase = ({ open, setOpen, onPurchaseAdded }) => {
         ]);
 
         setBoxes(boxRes.data.data?.boxes || boxRes.data.boxes || []);
-        setProducts(productRes.data.data?.products || productRes.data.products || []);
+        setProducts(
+          productRes.data.data?.products || productRes.data.products || []
+        );
 
-        const fetchedWastes = wasteRes.data.waistes || wasteRes.data.wastes || [];
+        const fetchedWastes =
+          wasteRes.data.waistes || wasteRes.data.wastes || [];
         const inStockWastes = fetchedWastes.filter(
           (waste) => parseFloat(waste.qtt) > 0
         );
@@ -52,7 +55,8 @@ const AddBoxWastePurchase = ({ open, setOpen, onPurchaseAdded }) => {
       } catch (err) {
         console.error("Failed to fetch options:", err);
         const errorMessage =
-          err.response?.data?.message || "Erreur lors du chargement des options";
+          err.response?.data?.message ||
+          "Erreur lors du chargement des options";
         setFormErrors({ fetch: errorMessage });
         ShowToast.error(errorMessage);
       }
@@ -143,7 +147,10 @@ const AddBoxWastePurchase = ({ open, setOpen, onPurchaseAdded }) => {
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      const response = await axiosInstance.post("/purchase/box-waste", purchaseInfo);
+      const response = await axiosInstance.post(
+        "/purchase/box-waste",
+        purchaseInfo
+      );
       if (response.status === 201) {
         // ShowToast.success("Achat créé avec succès !");
         cancel();
@@ -169,13 +176,13 @@ const AddBoxWastePurchase = ({ open, setOpen, onPurchaseAdded }) => {
     } else if (step === 2) {
       if (boxes.length === 0) {
         errors.boxes = "Aucune caisse disponible.";
-      } else if (purchaseInfo.purchaseBoxes.length === 0 && purchaseInfo.purchaseWaste.length === 0) {
-        errors.boxes = "Au moins une caisse ou un déchet est requis.";
       } else {
         purchaseInfo.purchaseBoxes.forEach((b, i) => {
           if (!b.box) errors[`box_${i}_box`] = "Caisse requise";
-          if (b.qttIn < 0) errors[`box_${i}_qttIn`] = "Quantité non-négative requise";
-          if (b.qttOut < 0) errors[`box_${i}_qttOut`] = "Quantité non-négative requise";
+          if (b.qttIn < 0)
+            errors[`box_${i}_qttIn`] = "Quantité non-négative requise";
+          if (b.qttOut < 0)
+            errors[`box_${i}_qttOut`] = "Quantité non-négative requise";
         });
       }
     } else if (step === 3 && purchaseInfo.purchaseWaste.length > 0) {
@@ -184,10 +191,13 @@ const AddBoxWastePurchase = ({ open, setOpen, onPurchaseAdded }) => {
         if (w.qtt <= 0) errors[`waste_${i}_qtt`] = "Quantité positive requise";
         if (!w.type) errors[`waste_${i}_type`] = "Type requis";
         const selectedWaste = wasteProducts.find(
-          (waste) => waste.product === parseInt(w.product_id) && waste.type === w.type
+          (waste) =>
+            waste.product === parseInt(w.product_id) && waste.type === w.type
         );
         if (selectedWaste && w.qtt > parseFloat(selectedWaste.qtt)) {
-          errors[`waste_${i}_qtt`] = `Quantité dépasse le stock disponible (${selectedWaste.qtt})`;
+          errors[
+            `waste_${i}_qtt`
+          ] = `Quantité dépasse le stock disponible (${selectedWaste.qtt})`;
         }
       });
     }
@@ -206,7 +216,9 @@ const AddBoxWastePurchase = ({ open, setOpen, onPurchaseAdded }) => {
     >
       <div className="bg-white rounded-lg p-6 w-[660px] max-h-[80vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-bold">Ajouter un Achat (Caisses/Déchets)</h2>
+          <h2 className="text-lg font-bold">
+            Ajouter un Achat (Caisses/Déchets)
+          </h2>
           <Button variant="ghost" onClick={cancel} disabled={loading}>
             <X className="w-4 h-4" />
           </Button>
@@ -240,7 +252,9 @@ const AddBoxWastePurchase = ({ open, setOpen, onPurchaseAdded }) => {
           </div>
         </div>
 
-        {formErrors.fetch && <p className="text-red-500 text-sm mb-2">{formErrors.fetch}</p>}
+        {formErrors.fetch && (
+          <p className="text-red-500 text-sm mb-2">{formErrors.fetch}</p>
+        )}
 
         {/* Step 1: Supplier and Date */}
         {step === 1 && (
@@ -267,7 +281,9 @@ const AddBoxWastePurchase = ({ open, setOpen, onPurchaseAdded }) => {
                 ))}
               </select>
               {formErrors.supplier_id && (
-                <p className="text-red-500 text-xs mt-1">{formErrors.supplier_id}</p>
+                <p className="text-red-500 text-xs mt-1">
+                  {formErrors.supplier_id}
+                </p>
               )}
             </div>
             <div>
@@ -295,7 +311,9 @@ const AddBoxWastePurchase = ({ open, setOpen, onPurchaseAdded }) => {
         {/* Step 2: Boxes */}
         {step === 2 && (
           <div className="space-y-3">
-            {formErrors.boxes && <p className="text-red-500 text-sm">{formErrors.boxes}</p>}
+            {formErrors.boxes && (
+              <p className="text-red-500 text-sm">{formErrors.boxes}</p>
+            )}
             {purchaseInfo.purchaseBoxes.map((box, index) => (
               <div key={index} className="border p-3 rounded space-y-2">
                 <div>
@@ -304,7 +322,9 @@ const AddBoxWastePurchase = ({ open, setOpen, onPurchaseAdded }) => {
                     value={box.box}
                     onChange={(e) => updateBox(index, "box", e.target.value)}
                     className={`w-full border rounded p-2 text-sm ${
-                      formErrors[`box_${index}_box`] ? "border-red-500" : "border-gray-300"
+                      formErrors[`box_${index}_box`]
+                        ? "border-red-500"
+                        : "border-gray-300"
                     }`}
                     disabled={loading}
                   >
@@ -316,7 +336,9 @@ const AddBoxWastePurchase = ({ open, setOpen, onPurchaseAdded }) => {
                     ))}
                   </select>
                   {formErrors[`box_${index}_box`] && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors[`box_${index}_box`]}</p>
+                    <p className="text-red-500 text-xs mt-1">
+                      {formErrors[`box_${index}_box`]}
+                    </p>
                   )}
                 </div>
                 <div className="grid grid-cols-2 gap-2">
@@ -330,12 +352,16 @@ const AddBoxWastePurchase = ({ open, setOpen, onPurchaseAdded }) => {
                       }
                       min="0"
                       className={`text-sm ${
-                        formErrors[`box_${index}_qttIn`] ? "border-red-500" : "border-gray-300"
+                        formErrors[`box_${index}_qttIn`]
+                          ? "border-red-500"
+                          : "border-gray-300"
                       }`}
                       disabled={loading}
                     />
                     {formErrors[`box_${index}_qttIn`] && (
-                      <p className="text-red-500 text-xs mt-1">{formErrors[`box_${index}_qttIn`]}</p>
+                      <p className="text-red-500 text-xs mt-1">
+                        {formErrors[`box_${index}_qttIn`]}
+                      </p>
                     )}
                   </div>
                   <div>
@@ -344,16 +370,24 @@ const AddBoxWastePurchase = ({ open, setOpen, onPurchaseAdded }) => {
                       type="number"
                       value={box.qttOut}
                       onChange={(e) =>
-                        updateBox(index, "qttOut", parseInt(e.target.value) || 0)
+                        updateBox(
+                          index,
+                          "qttOut",
+                          parseInt(e.target.value) || 0
+                        )
                       }
                       min="0"
                       className={`text-sm ${
-                        formErrors[`box_${index}_qttOut`] ? "border-red-500" : "border-gray-300"
+                        formErrors[`box_${index}_qttOut`]
+                          ? "border-red-500"
+                          : "border-gray-300"
                       }`}
                       disabled={loading}
                     />
                     {formErrors[`box_${index}_qttOut`] && (
-                      <p className="text-red-500 text-xs mt-1">{formErrors[`box_${index}_qttOut`]}</p>
+                      <p className="text-red-500 text-xs mt-1">
+                        {formErrors[`box_${index}_qttOut`]}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -382,7 +416,9 @@ const AddBoxWastePurchase = ({ open, setOpen, onPurchaseAdded }) => {
         {step === 3 && (
           <div className="space-y-3">
             {wasteProducts.length === 0 && (
-              <p className="text-gray-500 text-sm">Aucun déchet en stock disponible.</p>
+              <p className="text-gray-500 text-sm">
+                Aucun déchet en stock disponible.
+              </p>
             )}
             {purchaseInfo.purchaseWaste.map((waste, index) => (
               <div key={index} className="border p-3 rounded space-y-2">
@@ -390,24 +426,36 @@ const AddBoxWastePurchase = ({ open, setOpen, onPurchaseAdded }) => {
                   <Label className="text-sm font-medium">Déchet</Label>
                   <select
                     value={`${waste.product_id}-${waste.type}`}
-                    onChange={(e) => updateWaste(index, "product_id", e.target.value)}
+                    onChange={(e) =>
+                      updateWaste(index, "product_id", e.target.value)
+                    }
                     className={`w-full border rounded p-2 text-sm ${
-                      formErrors[`waste_${index}_product_id`] ? "border-red-500" : "border-gray-300"
+                      formErrors[`waste_${index}_product_id`]
+                        ? "border-red-500"
+                        : "border-gray-300"
                     }`}
                     disabled={loading}
                   >
                     <option value="">Sélectionnez un déchet</option>
                     {wasteProducts.map((w) => {
-                      const product = products.find((p) => p.id === parseInt(w.product));
+                      const product = products.find(
+                        (p) => p.id === parseInt(w.product)
+                      );
                       return (
-                        <option key={`${w.product}-${w.type}`} value={`${w.product}-${w.type}`}>
-                          {product?.designation || "N/A"} ({w.type}) - Stock: {w.qtt}
+                        <option
+                          key={`${w.product}-${w.type}`}
+                          value={`${w.product}-${w.type}`}
+                        >
+                          {product?.designation || "N/A"} ({w.type}) - Stock:{" "}
+                          {w.qtt}
                         </option>
                       );
                     })}
                   </select>
                   {formErrors[`waste_${index}_product_id`] && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors[`waste_${index}_product_id`]}</p>
+                    <p className="text-red-500 text-xs mt-1">
+                      {formErrors[`waste_${index}_product_id`]}
+                    </p>
                   )}
                 </div>
                 <div>
@@ -420,12 +468,16 @@ const AddBoxWastePurchase = ({ open, setOpen, onPurchaseAdded }) => {
                     }
                     min="0"
                     className={`text-sm ${
-                      formErrors[`waste_${index}_qtt`] ? "border-red-500" : "border-gray-300"
+                      formErrors[`waste_${index}_qtt`]
+                        ? "border-red-500"
+                        : "border-gray-300"
                     }`}
                     disabled={loading}
                   />
                   {formErrors[`waste_${index}_qtt`] && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors[`waste_${index}_qtt`]}</p>
+                    <p className="text-red-500 text-xs mt-1">
+                      {formErrors[`waste_${index}_qtt`]}
+                    </p>
                   )}
                 </div>
                 <Button
@@ -454,9 +506,17 @@ const AddBoxWastePurchase = ({ open, setOpen, onPurchaseAdded }) => {
           <div className="space-y-3 text-sm">
             <h3 className="text-base font-semibold">Résumé de l'Achat</h3>
             <div className="grid grid-cols-2 gap-2">
-              <p><strong>Fournisseur:</strong></p>
-              <p>{suppliers.find((s) => s.id === parseInt(purchaseInfo.supplier_id))?.name || "N/A"}</p>
-              <p><strong>Date:</strong></p>
+              <p>
+                <strong>Fournisseur:</strong>
+              </p>
+              <p>
+                {suppliers.find(
+                  (s) => s.id === parseInt(purchaseInfo.supplier_id)
+                )?.name || "N/A"}
+              </p>
+              <p>
+                <strong>Date:</strong>
+              </p>
               <p>{format(new Date(purchaseInfo.date), "dd/MM/yyyy")}</p>
             </div>
             <div>
@@ -473,7 +533,10 @@ const AddBoxWastePurchase = ({ open, setOpen, onPurchaseAdded }) => {
                   <tbody>
                     {purchaseInfo.purchaseBoxes.map((b, i) => (
                       <tr key={i} className="border-b">
-                        <td className="p-1">{boxes.find((bx) => bx.id === parseInt(b.box))?.designation || "N/A"}</td>
+                        <td className="p-1">
+                          {boxes.find((bx) => bx.id === parseInt(b.box))
+                            ?.designation || "N/A"}
+                        </td>
                         <td className="p-1">{b.qttIn}</td>
                         <td className="p-1">{b.qttOut}</td>
                       </tr>
@@ -498,7 +561,10 @@ const AddBoxWastePurchase = ({ open, setOpen, onPurchaseAdded }) => {
                   <tbody>
                     {purchaseInfo.purchaseWaste.map((w, i) => (
                       <tr key={i} className="border-b">
-                        <td className="p-1">{products.find((p) => p.id === parseInt(w.product_id))?.designation || "N/A"}</td>
+                        <td className="p-1">
+                          {products.find((p) => p.id === parseInt(w.product_id))
+                            ?.designation || "N/A"}
+                        </td>
                         <td className="p-1">{w.qtt}</td>
                         <td className="p-1">{w.type}</td>
                       </tr>
@@ -509,7 +575,9 @@ const AddBoxWastePurchase = ({ open, setOpen, onPurchaseAdded }) => {
                 <p>Aucun déchet</p>
               )}
             </div>
-            {formErrors.submit && <p className="text-red-500 text-sm">{formErrors.submit}</p>}
+            {formErrors.submit && (
+              <p className="text-red-500 text-sm">{formErrors.submit}</p>
+            )}
           </div>
         )}
 

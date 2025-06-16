@@ -7,6 +7,8 @@ export const usePaymentStore = create((set, get) => ({
     payments: [],
     selectedPayment: null,
     employees: [],
+    sellerTrips: [],
+    tripTotals: {}, // Cache trip totals and commissions by payment ID
     summary: { totalPayments: 0, totalNetPay: 0, totalCredit: 0 },
     loading: false,
     error: null,
@@ -26,8 +28,7 @@ export const usePaymentStore = create((set, get) => ({
         sortBy: sort.sortBy || "year",
         sortOrder: sort.sortOrder || "DESC",
       };
-
-      const response = await axiosInstance.get("/payment", { params });
+      const response = await axiosInstance.get("/payment", { params, timeout: 10000 });
       if (response.status === 200) {
         const data = response.data.data || response.data;
         set((state) => ({
@@ -43,10 +44,22 @@ export const usePaymentStore = create((set, get) => ({
             loading: false,
           },
         }));
+        // Fetch trip totals for each payment
+        for (const payment of data.payments) {
+          if (payment.EmployeeAssociation?.role.toLowerCase() === "seller") {
+            await get().fetchTripTotals(
+              payment.payment_id,
+              payment.employee_cin,
+              payment.month,
+              payment.year
+            );
+          }
+        }
       } else {
         throw new Error(`Unexpected response status: ${response.status}`);
       }
     } catch (error) {
+      console.error("fetchPayments error:", error.message, error.response?.data, error.response?.status);
       set((state) => ({
         state: {
           ...state.state,
@@ -54,52 +67,92 @@ export const usePaymentStore = create((set, get) => ({
           error: error.message || "Failed to fetch payments",
         },
       }));
-      toast.error(
-        error.message || "Erreur lors de la récupération des paiements."
-      );
+      toast.error(error.message || "Erreur lors de la récupération des paiements.");
     }
   },
 
-  fetchPaymentsForEmployeeBetweenDates: async (
-    employeeId,
-    startMonth,
-    startYear,
-    endMonth,
-    endYear
-  ) => {
+  fetchTripTotals: async (paymentId, employeeId, month, year) => {
+    try {
+      const trips = await get().fetchSellerTrips(employeeId, month, year);
+      const totalWaitedAmount = trips.reduce((sum, trip) => sum + (parseFloat(trip.waitedAmount) || 0), 0);
+      const commission = totalWaitedAmount * 0.008;
+      set((state) => ({
+        state: {
+          ...state.state,
+          tripTotals: {
+            ...state.state.tripTotals,
+            [paymentId]: { totalWaitedAmount: totalWaitedAmount.toFixed(2), commission: commission.toFixed(2) },
+          },
+        },
+      }));
+    } catch (error) {
+      console.error("fetchTripTotals error:", error.message);
+      set((state) => ({
+        state: {
+          ...state.state,
+          tripTotals: {
+            ...state.state.tripTotals,
+            [paymentId]: { totalWaitedAmount: "0.00", commission: "0.00" },
+          },
+        },
+      }));
+    }
+  },
+
+  fetchSellerTrips: async (employeeId, month, year) => {
+    set((state) => ({ state: { ...state.state, loading: true, error: null } }));
+    try {
+      const params = {
+        employee: employeeId,
+        startDate: `${year}-${month.toString().padStart(2, "0")}-01`,
+        endDate: `${year}-${month.toString().padStart(2, "0")}-${new Date(year, month, 0).getDate()}`,
+        status: "completed",
+      };
+      const response = await axiosInstance.get("/trip", { params, timeout: 10000 });
+      if (response.status === 200) {
+        set((state) => ({
+          state: {
+            ...state.state,
+            sellerTrips: response.data.trips || [],
+            loading: false,
+          },
+        }));
+        return response.data.trips || [];
+      } else {
+        throw new Error(`Unexpected response status: ${response.status}`);
+      }
+    } catch (error) {
+      console.error("fetchSellerTrips error:", error.message, error.response?.data, error.response?.status);
+      set((state) => ({
+        state: {
+          ...state.state,
+          loading: false,
+          error: error.message || "Failed to fetch seller trips",
+        },
+      }));
+      toast.error(error.message || "Erreur lors de la récupération des tournées du vendeur.");
+      return [];
+    }
+  },
+
+  fetchPaymentsForEmployeeBetweenDates: async (employeeId, startMonth, startYear, endMonth, endYear) => {
     set((state) => ({ state: { ...state.state, loading: true, error: null } }));
     try {
       const params = { employeeId, startMonth, startYear, endMonth, endYear };
-      const requestUrl = axiosInstance.getUri({
-        url: "/payment/between-dates",
-        params,
-      });
+      const requestUrl = axiosInstance.getUri({ url: "/payment/between-dates", params });
       console.log("Request URL:", requestUrl);
-      const response = await axiosInstance.get("/payment/between-dates", {
-        params,
-      });
-
+      const response = await axiosInstance.get("/payment/between-dates", { params, timeout: 10000 });
       if (response.status === 200) {
         const data = response.data.data || response.data;
         set((state) => ({
           state: { ...state.state, loading: false, error: null },
         }));
-
         return Array.isArray(data.payments) ? data.payments : [];
       } else {
-        set((state) => ({
-          state: { ...state.state, loading: false, error: null },
-        }));
-
         throw new Error(`Unexpected response status: ${response.status}`);
       }
     } catch (error) {
-      console.error(
-        "Error fetching payments:",
-        error.message,
-        error.response?.data,
-        error.response?.status
-      );
+      console.error("fetchPaymentsForEmployeeBetweenDates error:", error.message, error.response?.data, error.response?.status);
       set((state) => ({
         state: {
           ...state.state,
@@ -107,9 +160,7 @@ export const usePaymentStore = create((set, get) => ({
           error: error.message || "Failed to fetch payments",
         },
       }));
-      toast.error(
-        error.message || "Erreur lors de la récupération des paiements."
-      );
+      toast.error(error.message || "Erreur lors de la récupération des paiements.");
       return [];
     }
   },
@@ -117,23 +168,21 @@ export const usePaymentStore = create((set, get) => ({
   fetchEmployees: async () => {
     set((state) => ({ state: { ...state.state, loading: true, error: null } }));
     try {
-      const response = await axiosInstance.get("/payment/employees");
-      console.log("Fetch Employees Response:", response.data);
+      const response = await axiosInstance.get("/payment/employees", { timeout: 5000 });
+      console.log("fetchEmployees response:", response.data);
       if (response.status === 200) {
         set((state) => ({
           state: {
             ...state.state,
-            employees: Array.isArray(response.data.employees)
-              ? response.data.employees
-              : [],
+            employees: Array.isArray(response.data.employees) ? response.data.employees : [],
             loading: false,
           },
         }));
       } else {
-        throw new Error("Unexpected response status");
+        throw new Error(`Unexpected response status: ${response.status}`);
       }
     } catch (error) {
-      console.error("Fetch Employees Error:", error);
+      console.error("fetchEmployees error:", error.message, error.response?.data, error.response?.status);
       set((state) => ({
         state: {
           ...state.state,
@@ -141,16 +190,14 @@ export const usePaymentStore = create((set, get) => ({
           error: error.message || "Failed to fetch employees",
         },
       }));
-      toast.error(
-        error.message || "Erreur lors de la récupération des employés."
-      );
+      toast.error(error.message || "Erreur lors de la récupération des employés.");
     }
   },
 
   fetchPaymentById: async (id) => {
     set((state) => ({ state: { ...state.state, loading: true, error: null } }));
     try {
-      const response = await axiosInstance.get(`/payment/${id}`);
+      const response = await axiosInstance.get(`/payment/${id}`, { timeout: 5000 });
       if (response.status === 200) {
         set((state) => ({
           state: {
@@ -160,9 +207,10 @@ export const usePaymentStore = create((set, get) => ({
           },
         }));
       } else {
-        throw new Error("Unexpected response status");
+        throw new Error(`Unexpected response status: ${response.status}`);
       }
     } catch (error) {
+      console.error("fetchPaymentById error:", error.message, error.response?.data, error.response?.status);
       set((state) => ({
         state: {
           ...state.state,
@@ -170,16 +218,14 @@ export const usePaymentStore = create((set, get) => ({
           error: error.message || "Failed to fetch payment",
         },
       }));
-      toast.error(
-        error.message || "Erreur lors de la récupération du paiement."
-      );
+      toast.error(error.message || "Erreur lors de la récupération du paiement.");
     }
   },
 
   createPayment: async (paymentInfo) => {
     set((state) => ({ state: { ...state.state, loading: true, error: null } }));
     try {
-      const response = await axiosInstance.post("/payment", paymentInfo);
+      const response = await axiosInstance.post("/payment", paymentInfo, { timeout: 5000 });
       if (response.status === 200) {
         await get().fetchPayments(
           get().state.pagination.currentPage,
@@ -189,10 +235,12 @@ export const usePaymentStore = create((set, get) => ({
         );
         set((state) => ({ state: { ...state.state, loading: false } }));
         toast.success("Paiement créé avec succès !");
+        return response.data.paymentEmployeeData;
       } else {
-        throw new Error("Unexpected response status");
+        throw new Error(`Unexpected response status: ${response.status}`);
       }
     } catch (error) {
+      console.error("createPayment error:", error.message, error.response?.data, error.response?.status);
       set((state) => ({
         state: {
           ...state.state,
@@ -201,15 +249,14 @@ export const usePaymentStore = create((set, get) => ({
         },
       }));
       toast.error(error.message || "Erreur lors de la création du paiement.");
+      throw error;
     }
   },
 
   updatePayment: async (paymentId, status) => {
     set((state) => ({ state: { ...state.state, loading: true, error: null } }));
     try {
-      const response = await axiosInstance.patch(`/payment/${paymentId}`, {
-        status,
-      });
+      const response = await axiosInstance.patch(`/payment/${paymentId}`, { status }, { timeout: 5000 });
       if (response.status === 200) {
         await get().fetchPayments(
           get().state.pagination.currentPage,
@@ -222,9 +269,10 @@ export const usePaymentStore = create((set, get) => ({
         }));
         toast.success("Paiement mis à jour avec succès !");
       } else {
-        throw new Error("Unexpected response status");
+        throw new Error(`Unexpected response status: ${response.status}`);
       }
     } catch (error) {
+      console.error("updatePayment error:", error.message, error.response?.data, error.response?.status);
       set((state) => ({
         state: {
           ...state.state,
@@ -232,9 +280,7 @@ export const usePaymentStore = create((set, get) => ({
           error: error.message || "Failed to update payment",
         },
       }));
-      toast.error(
-        error.message || "Erreur lors de la mise à jour du paiement."
-      );
+      toast.error(error.message || "Erreur lors de la mise à jour du paiement.");
     }
   },
 
@@ -246,7 +292,7 @@ export const usePaymentStore = create((set, get) => ({
         params.month = month;
         params.year = year;
       }
-      const response = await axiosInstance.get("/payment/summary", { params });
+      const response = await axiosInstance.get("/payment/summary", { params, timeout: 5000 });
       if (response.status === 200) {
         set((state) => ({
           state: {
@@ -260,9 +306,10 @@ export const usePaymentStore = create((set, get) => ({
           },
         }));
       } else {
-        throw new Error("Unexpected response status");
+        throw new Error(`Unexpected response status: ${response.status}`);
       }
     } catch (error) {
+      console.error("fetchSummary error:", error.message, error.response?.data, error.response?.status);
       set((state) => ({
         state: {
           ...state.state,
