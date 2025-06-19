@@ -31,6 +31,13 @@ const FinishTripForm = ({
             TripProducts: tripDetails.TripProducts?.map((p) => ({
               product: p.product,
               designation: p.ProductAssociation?.designation,
+              qttOut: p.qttOut,
+              qttOutUnite: p.qttOutUnite,
+            })),
+            TripBoxes: tripDetails.TripBoxes?.map((b) => ({
+              box: b.box,
+              designation: b.BoxAssociation?.designation,
+              qttOut: b.qttOut,
             })),
           }
         : null,
@@ -38,49 +45,76 @@ const FinishTripForm = ({
         id: p.id,
         designation: p.designation,
       })),
-      boxes: boxes?.map((b) => ({ id: b.id, designation: b.designation })),
+      boxes: boxes?.map((b) => ({
+        id: b.id,
+        designation: b.designation,
+      })),
     });
 
-    if (tripDetails) {
-      const tripProducts =
-        tripDetails.TripProducts?.map((p) => {
-          const productId = Number(p.product);
-          const productFromProps = products.find(
-            (prod) => Number(prod.id) === productId
-          );
-          const designation =
-            p.ProductAssociation?.designation ||
-            productFromProps?.designation ||
-            "Produit inconnu";
-          return {
-            product_id: productId,
-            designation,
-            qttReutour: 0,
-            qttReutourUnite: 0,
-          };
-        }) || [];
-
-      setFormData({
-        tripProducts,
-        tripBoxes:
-          tripDetails.TripBoxes?.map((b) => ({
-            box_id: Number(b.box),
-            designation:
-              b.BoxAssociation?.designation ||
-              boxes.find((box) => Number(box.id) === Number(b.box))
-                ?.designation ||
-              "Boîte inconnue",
-            qttIn: 0,
-          })) || [],
-        tripWastes: [],
-        tripCharges: [],
-        receivedAmount: "",
+    if (tripDetails && tripDetails.TripProducts && tripDetails.TripBoxes) {
+      const tripProducts = tripDetails.TripProducts.map((p) => {
+        const productId = Number(p.product);
+        const productFromProps = products.find(
+          (prod) => Number(prod.id) === productId
+        );
+        const designation =
+          p.ProductAssociation?.designation ||
+          productFromProps?.designation ||
+          `Produit ID ${productId}`;
+        return {
+          product_id: productId,
+          designation,
+          qttReutour: p.qttReutour || 0,
+          qttReutourUnite: p.qttReutourUnite || 0,
+          qttOut: p.qttOut || 0, // Include for validation
+          qttOutUnite: p.qttOutUnite || 0, // Include for validation
+        };
       });
+
+      const tripBoxes = tripDetails.TripBoxes.map((b) => {
+        const boxId = Number(b.box);
+        const boxFromProps = boxes.find(
+          (box) => Number(box.id) === boxId
+        );
+        const designation =
+          b.BoxAssociation?.designation ||
+          boxFromProps?.designation ||
+          `Boîte ID ${boxId}`;
+        return {
+          box_id: boxId,
+          designation,
+          qttIn: b.qttIn || 0,
+          qttOut: b.qttOut || 0, // Include for validation
+        };
+      });
+
+      setFormData((prev) => ({
+        ...prev,
+        tripProducts,
+        tripBoxes,
+        tripWastes: prev.tripWastes.length ? prev.tripWastes : [],
+        tripCharges: prev.tripCharges.length ? prev.tripCharges : [],
+        receivedAmount: prev.receivedAmount || "",
+      }));
 
       if (!tripProducts.length) {
         console.warn("No trip products found in tripDetails");
         toast.warning("Aucun produit associé à cette tournée.");
       }
+      if (!tripBoxes.length) {
+        console.warn("No trip boxes found in tripDetails");
+        toast.warning("Aucune boîte associée à cette tournée.");
+      }
+    } else {
+      console.warn("tripDetails is incomplete or undefined", { tripDetails });
+      setFormData({
+        tripProducts: [],
+        tripBoxes: [],
+        tripWastes: [],
+        tripCharges: [],
+        receivedAmount: "",
+      });
+      toast.error("Données de tournée non disponibles.");
     }
   }, [tripDetails, products, boxes]);
 
@@ -130,11 +164,45 @@ const FinishTripForm = ({
     e.preventDefault();
     try {
       // Validate form data
-      if (formData.tripWastes.some(w => !w.product_id || !w.type || !w.qtt)) {
-        throw new Error("Tous les champs des déchets sont requis.");
+      if (!formData.tripProducts.length || !formData.tripBoxes.length) {
+        throw new Error("Les produits et boîtes de tournée sont requis.");
       }
-      if (formData.tripCharges.some(c => !c.type || !c.amount)) {
-        throw new Error("Tous les champs des charges sont requis.");
+
+      for (const product of formData.tripProducts) {
+        if (product.qttReutour < 0 || product.qttReutourUnite < 0) {
+          throw new Error(
+            `Quantités retournées négatives pour ${product.designation}.`
+          );
+        }
+        if (product.qttReutour > product.qttOut) {
+          throw new Error(
+            `Quantité retournée (caisses) pour ${product.designation} dépasse la quantité sortie.`
+          );
+        }
+        if (product.qttReutourUnite > product.qttOutUnite) {
+          throw new Error(
+            `Quantité retournée (unités) pour ${product.designation} dépasse la quantité sortie.`
+          );
+        }
+      }
+
+      for (const box of formData.tripBoxes) {
+        if (box.qttIn < 0) {
+          throw new Error(`Quantité entrée négative pour ${box.designation}.`);
+        }
+        if (box.qttIn > box.qttOut) {
+          throw new Error(
+            `Quantité entrée pour ${box.designation} dépasse la quantité sortie.`
+          );
+        }
+      }
+
+      if (formData.tripWastes.some((w) => !w.product_id || !w.type || w.qtt <= 0)) {
+        throw new Error("Tous les champs des déchets doivent être remplis et valides.");
+      }
+
+      if (formData.tripCharges.some((c) => !c.type || c.amount <= 0)) {
+        throw new Error("Tous les champs des charges doivent être remplis et valides.");
       }
 
       const submitData = {
@@ -158,7 +226,6 @@ const FinishTripForm = ({
         })),
       };
 
-      // Only include receivedAmount if excludeReceivedAmount is false
       if (!excludeReceivedAmount) {
         submitData.receivedAmount = parseFloat(formData.receivedAmount) || 0;
         if (submitData.receivedAmount < 0) {
@@ -166,6 +233,7 @@ const FinishTripForm = ({
         }
       }
 
+      console.log("Submitting form data:", submitData);
       onSubmit(submitData);
     } catch (error) {
       console.error("Form validation error:", error.message);
@@ -182,61 +250,56 @@ const FinishTripForm = ({
             Aucun produit disponible pour cette tournée.
           </p>
         ) : (
-          formData.tripProducts.map((product, index) => {
-            const tripProduct = tripDetails.TripProducts.find(
-              (tp) => Number(tp.product) === Number(product.product_id)
-            );
-            return (
-              <div key={index} className="border p-2 rounded space-y-2 mt-2">
-                <p className="text-sm text-gray-700">
-                  {product.designation} (ID: {product.product_id})
-                  {tripProduct && (
-                    <>
-                      {" "}
-                      (Sortie: {tripProduct.qttOut} caisses,{" "}
-                      {tripProduct.qttOutUnite} unités)
-                    </>
-                  )}
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div>
-                    <Label>Qté Retour (Caisses)</Label>
-                    <Input
-                      type="number"
-                      value={product.qttReutour}
-                      onChange={(e) =>
-                        handleChange(
-                          "tripProducts",
-                          index,
-                          "qttReutour",
-                          e.target.value
-                        )
-                      }
-                      min="0"
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label>Qté Retour (Unités)</Label>
-                    <Input
-                      type="number"
-                      value={product.qttReutourUnite}
-                      onChange={(e) =>
-                        handleChange(
-                          "tripProducts",
-                          index,
-                          "qttReutourUnite",
-                          e.target.value
-                        )
-                      }
-                      min="0"
-                      className="mt-1"
-                    />
-                  </div>
+          formData.tripProducts.map((product, index) => (
+            <div key={`${product.product_id}-${index}`} className="border p-2 rounded space-y-2 mt-2">
+              <p className="text-sm text-gray-700">
+                {product.designation} (ID: {product.product_id})
+                {product.qttOut !== undefined && (
+                  <>
+                    {" "}
+                    (Sortie: {product.qttOut} caisses,{" "}
+                    {product.qttOutUnite} unités)
+                  </>
+                )}
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <Label>Qté Retour (Caisses)</Label>
+                  <Input
+                    type="number"
+                    value={product.qttReutour}
+                    onChange={(e) =>
+                      handleChange(
+                        "tripProducts",
+                        index,
+                        "qttReutour",
+                        e.target.value
+                      )
+                    }
+                    min="0"
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label>Qté Retour (Unités)</Label>
+                  <Input
+                    type="number"
+                    value={product.qttReutourUnite}
+                    onChange={(e) =>
+                      handleChange(
+                        "tripProducts",
+                        index,
+                        "qttReutourUnite",
+                        e.target.value
+                      )
+                    }
+                    min="0"
+                    className="mt-1"
+                  />
                 </div>
               </div>
-            );
-          })
+            </div>
+          ))
         )}
       </div>
 
@@ -247,38 +310,33 @@ const FinishTripForm = ({
             Aucune boîte disponible pour cette tournée.
           </p>
         ) : (
-          formData.tripBoxes.map((box, index) => {
-            const tripBox = tripDetails.TripBoxes.find(
-              (tb) => Number(tb.box) === Number(box.box_id)
-            );
-            return (
-              <div key={index} className="border p-2 rounded space-y-2 mt-2">
-                <p className="text-sm text-gray-700">
-                  {box.designation} (ID: {box.box_id})
-                  {tripBox && <> (Sortie: {tripBox.qttOut})</>}
-                </p>
-                <div>
-                  <Label>Qté Entrée</Label>
-                  <Input
-                    type="number"
-                    value={box.qttIn}
-                    onChange={(e) =>
-                      handleChange("tripBoxes", index, "qttIn", e.target.value)
-                    }
-                    min="0"
-                    className="mt-1"
-                  />
-                </div>
+          formData.tripBoxes.map((box, index) => (
+            <div key={`${box.box_id}-${index}`} className="border p-2 rounded space-y-2 mt-2">
+              <p className="text-sm text-gray-700">
+                {box.designation} (ID: {box.box_id})
+                {box.qttOut !== undefined && <> (Sortie: {box.qttOut})</>}
+              </p>
+              <div>
+                <Label>Qté Entrée</Label>
+                <Input
+                  type="number"
+                  value={box.qttIn}
+                  onChange={(e) =>
+                    handleChange("tripBoxes", index, "qttIn", e.target.value)
+                  }
+                  min="0"
+                  className="mt-1"
+                />
               </div>
-            );
-          })
+            </div>
+          ))
         )}
       </div>
 
       <div>
         <h6 className="text-md font-medium text-gray-800">Déchets:</h6>
         {formData.tripWastes.map((waste, index) => (
-          <div key={index} className="border p-2 rounded space-y-2 mt-2">
+          <div key={`waste-${index}`} className="border p-2 rounded space-y-2 mt-2">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <div>
                 <Label>Produit</Label>
@@ -315,7 +373,7 @@ const FinishTripForm = ({
                   onChange={(e) =>
                     handleChange("tripWastes", index, "qtt", e.target.value)
                   }
-                  min="0"
+                  min="1"
                   className="mt-1"
                 />
               </div>
@@ -343,7 +401,7 @@ const FinishTripForm = ({
       <div>
         <h6 className="text-md font-medium text-gray-800">Charges:</h6>
         {formData.tripCharges.map((charge, index) => (
-          <div key={index} className="border p-2 rounded space-y-2 mt-2">
+          <div key={`charge-${index}`} className="border p-2 rounded space-y-2 mt-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div>
                 <Label>Type</Label>
