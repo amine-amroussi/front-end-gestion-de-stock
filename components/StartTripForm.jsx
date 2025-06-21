@@ -365,7 +365,7 @@ const StartTripForm = ({ open, onOpenChange, onTripStarted }) => {
       if (!formData.zone) errors.zone = "Zone requise";
     } else if (activeStep === 3) {
       if (
-        !formData.tripProducts.some((p) => p.qttOut > 0 || p.qttOutUnite > 0 || p.newQttOut > 0 || p.newQttOutUnite > 0)
+        !formData.tripProducts.some((p) => p.qttOut > 0 || p.qttOutUnite > 0)
       ) {
         errors.products = "Au moins un produit avec quantité requise";
       }
