@@ -10,9 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 
 const PurchaseInfoModal = ({ open, setOpen, purchase }) => {
   const [selectedPurchase, setSelectedPurchase] = useState(purchase);
-  const { purchaseState: { purchases }, fetchAllPurchases } = usePurchase();  
-
-  console.log("PurchaseInfoModal props:", { open, setOpen, purchase, selectedPurchase });
+  const { purchaseState: { purchases }, fetchAllPurchases } = usePurchase();
 
   useEffect(() => {
     if (open && !purchase) {
@@ -21,47 +19,26 @@ const PurchaseInfoModal = ({ open, setOpen, purchase }) => {
     setSelectedPurchase(purchase);
   }, [open, purchase, fetchAllPurchases]);
 
-  useEffect(() => {
-    if (selectedPurchase) {
-      console.log("PurchaseInfoModal Data:", JSON.stringify({
-        ProductAssociation: selectedPurchase.ProductAssociation,
-        PurchaseWastes: selectedPurchase.PurchaseWastes?.map(w => ({
-          purchase_id: w.purchase_id,
-          product: w.product,
-          type: w.type,
-          qtt: w.qtt,
-          supplier: w.supplier,
-          ProductAssociation: w.ProductAssociation,
-        })),
-        WastesArray: selectedPurchase.WastesArray,
-      }, null, 2));
-    }
-  }, [selectedPurchase]);
-
   const handleClose = () => {
     if (typeof setOpen === "function") {
       setOpen(false);
       setSelectedPurchase(null);
     } else {
-      console.error("setOpen is not a function or is undefined");
+      ShowToast.error("Erreur interne: impossible de fermer la fenêtre.");
     }
   };
 
-  // fetch the product by Id 
   const fetchProductById = async (id) => {
     try {
       const response = await axiosInstance.get(`/product/${id}`);
       if (response.status === 200) {
-         console.log(response.data.product);  
-         return response.data.product;
-      } else {
-        throw new Error("Unexpected response status");
+        return response.data.product;
       }
+      throw new Error("Unexpected response status");
     } catch (error) {
-      console.error("Error fetching product:", error);
       return null;
     }
-  }
+  };
 
   const handleSendToSupplier = async () => {
     if (!selectedPurchase) {
@@ -81,7 +58,7 @@ const PurchaseInfoModal = ({ open, setOpen, purchase }) => {
       if (hasBoxes) {
         payload.boxes = selectedPurchase.BoxAssociation.map((box) => ({
           box_id: box.box,
-          designation: box.BoxAssociation?.designation || "N/A",
+          designation: box.designation || "N/A",
           qttIn: box.qttIn || 0,
           qttOut: box.qttOut || 0,
         }));
@@ -95,14 +72,11 @@ const PurchaseInfoModal = ({ open, setOpen, purchase }) => {
         }));
       }
 
-      console.log("Sending to supplier:", { purchase_id: selectedPurchase.id, payload });
-
       await axiosInstance.post(`/purchase/${selectedPurchase.id}/send-supplier`, payload);
 
       ShowToast.success("Données envoyées au fournisseur avec succès !");
       handleClose();
     } catch (err) {
-      console.error("Failed to send to supplier:", err);
       const errorMessage =
         err.response?.data?.message || "Erreur lors de l'envoi au fournisseur";
       ShowToast.error(errorMessage);
@@ -174,7 +148,7 @@ const PurchaseInfoModal = ({ open, setOpen, purchase }) => {
                   <tbody>
                     {selectedPurchase.ProductAssociation.map((prod, index) => (
                       <tr key={index} className="hover:bg-gray-50">
-                        <td className="border border-gray-200 px-4 py-2">{prod.ProductAssociation?.designation || "N/A"}</td>
+                        <td className="border border-gray-200 px-4 py-2">{prod.designation || "N/A"}</td>
                         <td className="border border-gray-200 px-4 py-2">{prod.qtt || 0}</td>
                         <td className="border border-gray-200 px-4 py-2">{prod.qttUnite || 0}</td>
                         <td className="border border-gray-200 px-4 py-2">{prod.price || 0}</td>
@@ -201,7 +175,7 @@ const PurchaseInfoModal = ({ open, setOpen, purchase }) => {
                   <tbody>
                     {selectedPurchase.BoxAssociation.map((box, index) => (
                       <tr key={index} className="hover:bg-gray-50">
-                        <td className="border border-gray-200 px-4 py-2">{box.BoxAssociation?.designation || "N/A"}</td>
+                        <td className="border border-gray-200 px-4 py-2">{box.designation || "N/A"}</td>
                         <td className="border border-gray-200 px-4 py-2 text-right">{box.qttIn || 0}</td>
                         <td className="border border-gray-200 px-4 py-2 text-right">{box.qttOut || 0}</td>
                       </tr>

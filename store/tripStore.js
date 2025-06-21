@@ -118,6 +118,29 @@ export const useTrip = create((set, get) => ({
     throw new Error(errorMessage);
   }
 },
+fetchLastTripByMatricule : async (matricule) => {
+  try {
+    console.log(`Fetching last trip for truck with matricule: ${matricule}`);
+    const response = await axiosInstance.get(`/trip/last/${matricule}`);
+    console.log("fetchLastTripByMatricule response:", response.data);
+
+    if (response.status === 200) {
+      return response.data.trip;
+    } else {
+      throw new Error("Erreur lors de la récupération de la dernière tournée.");
+    }
+  } catch (error) {
+    const errorMessage = error.response?.data?.message || "Erreur lors de la récupération de la dernière tournée.";
+    console.error("fetchLastTripByMatricule error:", {
+      message: errorMessage,
+      status: error.response?.status,
+      data: error.response?.data,
+    });
+    toast.error(errorMessage);
+    throw new Error(errorMessage);
+  }
+},
+
   startTrip: async (tripData) => {
     try {
       console.log("Sending startTrip request with data:", tripData);
@@ -125,9 +148,11 @@ export const useTrip = create((set, get) => ({
         tripState: { ...state.tripState, loadingTrip: true, error: null },
       }));
 
+      // Send the request
       const response = await axiosInstance.post(`/trip/start`, tripData);
       console.log("startTrip response:", response.data);
 
+      // If the response is successful, add the new trip to the list of active trips
       if (response.status === 201) {
         set((state) => ({
           tripState: {
@@ -135,11 +160,13 @@ export const useTrip = create((set, get) => ({
             activeTrips: [...state.tripState.activeTrips, response.data.trip],
           },
         }));
+        // Fetch the updated list of active trips
         await get().fetchActiveTrips();
       }
     } catch (error) {
       console.log(error);
       
+      // Extract the error message from the response
       const errorMessage = error.response?.data?.message || "Erreur lors du démarrage de la tournée.";
       console.error("startTrip error:", {
         message: errorMessage,
@@ -147,12 +174,16 @@ export const useTrip = create((set, get) => ({
         data: error.response?.data,
         request: tripData,
       });
+      // Update the state with the error message
       set((state) => ({
         tripState: { ...state.tripState, loadingTrip: false, error: errorMessage },
       }));
+      // Show a toast with the error message
       toast.error(errorMessage);
+      // Throw the error to propagate it to the caller
       throw error;
     } finally {
+      // Reset the loading flag
       set((state) => ({
         tripState: { ...state.tripState, loadingTrip: false },
       }));
