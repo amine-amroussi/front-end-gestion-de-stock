@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { axiosInstance } from "@/utils/axiosInstance";
 import { toast } from "sonner";
+import { ShowToast } from "@/utils/toast";
 
 export const useTrip = create((set, get) => ({
   tripState: {
@@ -37,6 +38,7 @@ export const useTrip = create((set, get) => ({
       });
 
       if (response.status === 200) {
+        ShowToast.successAdd(`L'achat est ajoute`)
         const { trips, totalItems, totalPages, currentPage } = response.data;
         set((state) => ({
           tripState: {

@@ -81,7 +81,7 @@ const StartTripForm = ({ open, onOpenChange, onTripStarted }) => {
           const tripBoxes = response.data.tripBoxes || [];
 
           const remainingProducts = tripProducts
-            .filter((tp) => tp.qttReutour >= 0 || tp.qttReutourUnite >= 0)
+            .filter((tp) => tp.qttReutour > 0 && tp.qttReutourUnite > 0)
             .map((tp) => ({
               product_id: tp.product.toString(),
               qttOut: tp.qttReutour || 0,
@@ -92,7 +92,7 @@ const StartTripForm = ({ open, onOpenChange, onTripStarted }) => {
             }));
 
           const remainingBoxes = tripBoxes
-            .filter((tb) => tb.qttIn >= 0)
+            .filter((tb) => tb.qttIn > 0)
             .map((tb) => ({
               box_id: tb.box.toString(),
               qttOut: tb.qttOut - tb.qttIn || 0,
@@ -338,7 +338,7 @@ const StartTripForm = ({ open, onOpenChange, onTripStarted }) => {
       };
 
       console.log(submitData);
-      
+        
       await onTripStarted(submitData);  
       toast.success("Tournée démarrée avec succès !");
       cancel();
@@ -365,7 +365,7 @@ const StartTripForm = ({ open, onOpenChange, onTripStarted }) => {
       if (!formData.zone) errors.zone = "Zone requise";
     } else if (activeStep === 3) {
       if (
-        !formData.tripProducts.some((p) => p.qttOut > 0 || p.qttOutUnite > 0)
+        !formData.tripProducts.some((p) => p.qttOut >= 0 || p.qttOutUnite >= 0)
       ) {
         errors.products = "Au moins un produit avec quantité requise";
       }

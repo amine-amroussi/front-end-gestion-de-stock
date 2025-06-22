@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { axiosInstance } from "@/utils/axiosInstance";
-import { ShowToast } from "@/utils/toast";
+import { ShowToast } from "@/utils/toast"; // Import the toast utility
 
 export const usePurchase = create((set, get) => ({
   purchaseState: {
@@ -15,7 +15,7 @@ export const usePurchase = create((set, get) => ({
       pageSize: 10,
     },
   },
-  fetchAllPurchases: async (page = 1, limit = 10, filters = {}) => {
+  fetchAllPurchases: async (page = 1, limit = 10) => {
     const toastId = ShowToast.loading("Chargement des achats...");
     try {
       set((state) => ({
@@ -23,7 +23,7 @@ export const usePurchase = create((set, get) => ({
       }));
 
       const response = await axiosInstance.get(`/purchase`, {
-        params: { page, limit, ...filters },
+        params: { page, limit },
       });
 
       if (response.status === 200) {
@@ -40,7 +40,7 @@ export const usePurchase = create((set, get) => ({
         ShowToast.successAdd("Achats chargés");
       }
     } catch (error) {
-      const errorMessage = error.response?.data?.msg || error.response?.data?.message || "Échec du chargement des achats";
+      const errorMessage = error.response?.data?.message || "Échec du chargement des achats";
       set((state) => ({
         purchaseState: {
           ...state.purchaseState,
@@ -51,41 +51,6 @@ export const usePurchase = create((set, get) => ({
       ShowToast.dismiss(toastId);
       ShowToast.error(errorMessage);
       console.error("Fetch purchases error:", error);
-    }
-  },
-  fetchRelatedPurchases: async (purchaseIds) => {
-    const toastId = ShowToast.loading("Chargement des achats liés...");
-    try {
-      set((state) => ({
-        purchaseState: { ...state.purchaseState, loadingPurchase: true, error: null },
-      }));
-
-      const purchases = await Promise.all(
-        purchaseIds.map((id) =>
-          axiosInstance.get(`/purchase/${id}`).then((res) => res.data.data.purchase)
-        )
-      );
-      set((state) => ({
-        purchaseState: {
-          ...state.purchaseState,
-          purchases: [...state.purchaseState.purchases, ...purchases],
-          loadingPurchase: false,
-        },
-      }));
-      ShowToast.dismiss(toastId);
-      ShowToast.successAdd("Achats liés chargés");
-    } catch (error) {
-      const errorMessage = error.response?.data?.msg || error.response?.data?.message || "Échec du chargement des achats liés";
-      set((state) => ({
-        purchaseState: {
-          ...state.purchaseState,
-          loadingPurchase: false,
-          error: errorMessage,
-        },
-      }));
-      ShowToast.dismiss(toastId);
-      ShowToast.error(errorMessage);
-      console.error("Fetch related purchases error:", error);
     }
   },
   fetchPurchase: async (id) => {
@@ -110,7 +75,7 @@ export const usePurchase = create((set, get) => ({
         ShowToast.successAdd("Achat chargé");
       }
     } catch (error) {
-      const errorMessage = error.response?.data?.msg || error.response?.data?.message || "Échec du chargement de l'achat";
+      const errorMessage = error.response?.data?.message || "Échec du chargement de l'achat";
       set((state) => ({
         purchaseState: {
           ...state.purchaseState,
@@ -147,7 +112,7 @@ export const usePurchase = create((set, get) => ({
         ShowToast.successAdd("Achat");
       }
     } catch (error) {
-      const errorMessage = error.response?.data?.msg || error.response?.data?.message || "Échec de la création de l'achat";
+      const errorMessage = error.response?.data?.message || "Échec de la création de l'achat";
       set((state) => ({
         purchaseState: {
           ...state.purchaseState,
@@ -181,7 +146,7 @@ export const usePurchase = create((set, get) => ({
         ShowToast.error("Aucune page suivante disponible");
       }
     } catch (error) {
-      const errorMessage = error.response?.data?.msg || error.response?.data?.message || "Échec du chargement de la page suivante";
+      const errorMessage = error.response?.data?.message || "Échec du chargement de la page suivante";
       set((state) => ({
         purchaseState: {
           ...state.purchaseState,

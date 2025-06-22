@@ -32,21 +32,23 @@ const AddPurchase = ({ open, setOpen, onPurchaseAdded }) => {
   const [wasteProducts, setWasteProducts] = useState([]);
   const [formErrors, setFormErrors] = useState({});
 
+  // Fetch suppliers and options
   useEffect(() => {
-    fetchAllSuppliers(1, 100);
+    fetchAllSuppliers(1, 100); // Fetch all suppliers
     const fetchOptions = async () => {
       try {
         const [productRes, boxRes, wasteRes] = await Promise.all([
           axiosInstance.get("/trip/products/all"),
           axiosInstance.get("/box"),
-          axiosInstance.get("/waste/all"),
+          axiosInstance.get("/waste/all"), // Changed to /waste/all
         ]);
 
         const fetchedProducts =
           productRes.data.data?.products || productRes.data.products || [];
         if (fetchedProducts.length === 0) {
           setFormErrors({
-            fetchProducts: "Aucun produit trouvé. Veuillez ajouter des produits d'abord.",
+            fetchProducts:
+              "Aucun produit trouvé. Veuillez ajouter des produits d'abord.",
           });
         } else {
           setProducts(fetchedProducts);
@@ -55,7 +57,7 @@ const AddPurchase = ({ open, setOpen, onPurchaseAdded }) => {
         setBoxes(boxRes.data.data?.boxes || boxRes.data.boxes || []);
 
         const fetchedWastes =
-          wasteRes.data.waistes || wasteRes.data.wastes || [];
+          wasteRes.data.waistes || wasteRes.data.wastes || []; // Handle typo
         const inStockWastes = fetchedWastes.filter(
           (waste) => parseFloat(waste.qtt) > 0
         );
@@ -64,20 +66,26 @@ const AddPurchase = ({ open, setOpen, onPurchaseAdded }) => {
         }
         setWasteProducts(inStockWastes);
       } catch (err) {
+        console.error("Failed to fetch options:", err);
         const errorMessage =
-          err.response?.data?.msg || err.response?.data?.message || "Erreur lors du chargement des options";
-        setFormErrors({ fetch: errorMessage });
+          err.response?.data?.message ||
+          "Erreur lors du chargement des options";
+        setFormErrors({
+          fetch: errorMessage,
+        });
         ShowToast.error(errorMessage);
       }
     };
     fetchOptions();
   }, [fetchAllSuppliers]);
 
+  // Handle input changes
   const handleChange = (e) => {
     setPurchaseInfo({ ...purchaseInfo, [e.target.name]: e.target.value });
     setFormErrors({ ...formErrors, [e.target.name]: "" });
   };
 
+  // Handle dynamic lists
   const addProduct = () => {
     setPurchaseInfo({
       ...purchaseInfo,
@@ -109,7 +117,7 @@ const AddPurchase = ({ open, setOpen, onPurchaseAdded }) => {
       ...purchaseInfo,
       purchaseBoxes: [
         ...purchaseInfo.purchaseBoxes,
-        { box: "", qttIn: 0, qttOut: 0, product: "" },
+        { box: "", qttIn: 0, qttOut: 0 },
       ],
     });
   };
@@ -157,10 +165,11 @@ const AddPurchase = ({ open, setOpen, onPurchaseAdded }) => {
   const removeWaste = (index) => {
     setPurchaseInfo({
       ...purchaseInfo,
-      purchaseWaste: purchaseInfo.purchaseBoxes.filter((_, i) => i !== index),
+      purchaseWaste: purchaseInfo.purchaseWaste.filter((_, i) => i !== index),
     });
   };
 
+  // Stepper navigation
   const nextStep = () => setStep(step + 1);
   const prevStep = () => setStep(step - 1);
   const cancel = () => {
@@ -176,20 +185,22 @@ const AddPurchase = ({ open, setOpen, onPurchaseAdded }) => {
     setFormErrors({});
   };
 
+  // Submit purchase
   const handleSubmit = async () => {
     try {
       await createPurchase(purchaseInfo);
       cancel();
       if (onPurchaseAdded) onPurchaseAdded();
-      ShowToast.successAdd("Purchase created successfully");
     } catch (err) {
+      console.error("Failed to create purchase:", err);
       const errorMessage =
-        err.response?.data?.msg || err.response?.data?.message || "Erreur lors de l'ajout de l'achat";
+        err.response?.data?.message || "Erreur lors de l'ajout de l'achat";
       setFormErrors({ submit: errorMessage });
       ShowToast.error(errorMessage);
     }
   };
 
+  // Validate steps
   const validateStep = () => {
     const errors = {};
     if (step === 1) {
@@ -224,26 +235,23 @@ const AddPurchase = ({ open, setOpen, onPurchaseAdded }) => {
         });
       }
     } else if (step === 4 && purchaseInfo.purchaseWaste.length > 0) {
-      if (!wasteProducts.length) {
-        errors.waste = "Aucun déchet disponible.";
-      } else {
-        purchaseInfo.purchaseWaste.forEach((w, i) => {
-          if (!w.product_id) errors[`waste_${i}_product_id`] = "Déchet requis";
-          if (w.qtt <= 0) errors[`waste_${i}_qtt`] = "Quantité positive requise";
-          if (!w.type) errors[`waste_${i}_type`] = "Type requis";
-          const selectedWaste = wasteProducts.find(
-            (waste) => waste.product === parseInt(w.product_id) && waste.type === w.type
-          );
-          if (selectedWaste && w.qtt > parseFloat(selectedWaste.qtt)) {
-            errors[`waste_${i}_qtt`] = `Quantité dépasse le stock disponible (${selectedWaste.qtt})`;
-          }
-        });
-      }
+      purchaseInfo.purchaseWaste.forEach((w, i) => {
+        if (!w.product_id) errors[`waste_${i}_product_id`] = "Déchet requis";
+        if (w.qtt <= 0) errors[`waste_${i}_qtt`] = "Quantité positive requise";
+        if (!w.type) errors[`waste_${i}_type`] = "Type requis";
+        const selectedWaste = wasteProducts.find(
+          (waste) => waste.product === parseInt(w.product_id) && waste.type === w.type
+        );
+        if (selectedWaste && w.qtt > parseFloat(selectedWaste.qtt)) {
+          errors[`waste_${i}_qtt`] = `Quantité dépasse le stock disponible (${selectedWaste.qtt})`;
+        }
+      });
     }
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
+  // Stepper UI
   const steps = ["Fournisseur", "Produits", "Caisses", "Déchets", "Révision"];
 
   return (
@@ -260,6 +268,7 @@ const AddPurchase = ({ open, setOpen, onPurchaseAdded }) => {
           </Button>
         </div>
 
+        {/* Stepper Navigation */}
         <div className="mb-4">
           <div className="flex items-center justify-between">
             {steps.map((label, index) => (
@@ -297,6 +306,7 @@ const AddPurchase = ({ open, setOpen, onPurchaseAdded }) => {
           </p>
         )}
 
+        {/* Step 1: Supplier and Date */}
         {step === 1 && (
           <div className="space-y-3">
             <div>
@@ -348,6 +358,7 @@ const AddPurchase = ({ open, setOpen, onPurchaseAdded }) => {
           </div>
         )}
 
+        {/* Step 2: Products */}
         {step === 2 && (
           <div className="space-y-3">
             {formErrors.products && (
@@ -475,6 +486,7 @@ const AddPurchase = ({ open, setOpen, onPurchaseAdded }) => {
           </div>
         )}
 
+        {/* Step 3: Boxes */}
         {step === 3 && (
           <div className="space-y-3">
             {formErrors.boxes && (
@@ -506,22 +518,6 @@ const AddPurchase = ({ open, setOpen, onPurchaseAdded }) => {
                       {formErrors[`box_${index}_box`]}
                     </p>
                   )}
-                </div>
-                <div>
-                  <Label className="text-sm font-medium">Produit (optionnel)</Label>
-                  <select
-                    value={box.product}
-                    onChange={(e) => updateBox(index, "product", e.target.value)}
-                    className="w-full border rounded p-2 text-sm border-gray-300"
-                    disabled={loadingPurchase}
-                  >
-                    <option value="">Aucun produit</option>
-                    {products.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.designation}
-                      </option>
-                    ))}
-                  </select>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
@@ -594,6 +590,7 @@ const AddPurchase = ({ open, setOpen, onPurchaseAdded }) => {
           </div>
         )}
 
+        {/* Step 4: Waste */}
         {step === 4 && (
           <div className="space-y-3">
             {wasteProducts.length === 0 && (
@@ -678,6 +675,7 @@ const AddPurchase = ({ open, setOpen, onPurchaseAdded }) => {
           </div>
         )}
 
+        {/* Step 5: Review */}
         {step === 5 && (
           <div className="space-y-3 text-sm">
             <h3 className="text-base font-semibold">Résumé de l'Achat</h3>
@@ -828,6 +826,7 @@ const AddPurchase = ({ open, setOpen, onPurchaseAdded }) => {
           </div>
         )}
 
+        {/* Stepper Controls */}
         <div className="flex justify-between mt-4 gap-2">
           <Button
             variant="outline"

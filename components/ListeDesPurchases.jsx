@@ -185,7 +185,7 @@ const PurchaseTable = ({ purchases, handleInfoClick, handlePrintInvoice }) => {
                 <td className="px-4 py-3 whitespace-nowrap">
                   {format(new Date(purchase.date), "dd/MM/yyyy")}
                 </td>
-                <td className="px-4 py-3 whitespace-nowrap">{total.toFixed(2)} MAD</td>
+                <td className="px-4 py-3 whitespace-nowrap">{parseFloat(total).toFixed(2)} MAD</td>
                 <td className="px-4 py-3 whitespace-nowrap">{productCount} produit(s)</td>
                 <td className="px-4 py-3 whitespace-nowrap text-right">
                   {totalBoxesIn}/{totalBoxesOut}
