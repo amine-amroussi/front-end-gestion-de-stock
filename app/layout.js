@@ -1,12 +1,9 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
-import { Toaster } from 'react-hot-toast';
-
-
+import { Toaster } from "react-hot-toast";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -33,7 +30,7 @@ export default function RootLayout({ children }) {
           <AppSidebar />
           <main className="p-5 w-full">
             <SidebarTrigger />
-          {children}
+            {children}
             <Toaster />
           </main>
         </SidebarProvider>

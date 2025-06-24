@@ -77,7 +77,7 @@ const PaymentPage = () => {
     const total = parseFloat(payment.total || 0);
     const credit = parseFloat(payment.credit || 0);
     const commission = parseFloat(tripTotals[payment.payment_id]?.commission || 0);
-    return (total - credit + commission).toFixed(2);
+    return (total + credit + commission).toFixed(2);
   };
 
   const handleInvoiceFormChange = (e) => {
@@ -485,9 +485,9 @@ const PaymentPage = () => {
                 { label: "Année", key: "year" },
                 { label: "Salaire de Base (MAD)", key: "total" },
                 { label: "Crédit (MAD)", key: "credit" },
+                { label: "Commission (MAD)", key: "commission" },
                 { label: "Net à payer (MAD)", key: "net_pay" },
                 { label: "Total Tournées (MAD)", key: "total_trips" },
-                { label: "Commission (MAD)", key: "commission" },
                 { label: "Statut", key: "status" },
                 { label: "Actions", key: "actions" },
               ].map((header) => (
@@ -528,13 +528,14 @@ const PaymentPage = () => {
                   <td className="px-6 py-4 whitespace-nowrap">{payment.year}</td>
                   <td className="px-6 py-4 whitespace-nowrap">{parseFloat(payment.total || 0).toFixed(2)} MAD</td>
                   <td className="px-6 py-4 whitespace-nowrap">{parseFloat(payment.credit || 0).toFixed(2)} MAD</td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {parseFloat(tripTotals[payment.payment_id]?.commission || 0).toFixed(2)} MAD
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap">{calculateNetPay(payment)} MAD</td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     {parseFloat(tripTotals[payment.payment_id]?.totalWaitedAmount || 0).toFixed(2)} MAD
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {parseFloat(tripTotals[payment.payment_id]?.commission || 0).toFixed(2)} MAD
-                  </td>
+                  
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span
                       className={`px-2 py-1 rounded text-xs ${
@@ -545,7 +546,10 @@ const PaymentPage = () => {
                           : "bg-red-100 text-red-800"
                       }`}
                     >
-                      {payment.status}
+                      {payment.status === "Paid"
+                        ? "Payé" : payment.status === "Pending"
+                        ? "En attente"
+                        : "Non payé"}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap flex gap-2">

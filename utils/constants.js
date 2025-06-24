@@ -16,7 +16,7 @@ import {
 
 export const links = [
   {
-    name: "Table de board",
+    name: "Vision General",
     url: "/",
     icon: <LayoutDashboard className="w-4 h-4" />,
   },

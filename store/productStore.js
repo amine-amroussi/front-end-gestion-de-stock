@@ -1,3 +1,4 @@
+// productStore.js
 import { create } from "zustand";
 import { axiosInstance } from "@/utils/axiosInstance";
 import { ShowToast } from "@/utils/toast";
@@ -15,38 +16,45 @@ export const useProduct = create((set, get) => ({
       pageSize: 10,
     },
   },
-  fetchAllProducts: async (page = 1, limit = 10) => {
+  fetchAllProducts: async (page = 1, limit = 10, filters = {}) => {
     try {
       set((state) => ({
         productState: { ...state.productState, loadingProduct: true },
       }));
 
+      // Clean and log filters
+      const cleanFilters = {};
+      if (filters.search) cleanFilters.search = filters.search.trim();
+      if (filters.minPrice && !isNaN(parseFloat(filters.minPrice))) {
+        cleanFilters.minPrice = parseFloat(filters.minPrice);
+      }
+      if (filters.maxPrice && !isNaN(parseFloat(filters.maxPrice))) {
+        cleanFilters.maxPrice = parseFloat(filters.maxPrice);
+      }
+      console.log("Fetching products with params:", { page, limit, ...cleanFilters });
+
       const response = await axiosInstance.get(`/product`, {
-        params: { page, limit },
+        params: { page, limit, ...cleanFilters },
       });
 
       if (response.status === 200) {
         const data = response.data;
+        console.log("Fetched products:", data.data.products);
         set((state) => ({
           productState: {
             ...state.productState,
             products: data.data.products,
             pagination: data.data.pagination,
+            loadingProduct: false,
           },
         }));
       }
     } catch (error) {
-      set((state) => ({
-        productState: {
-          ...state.productState,
-          loadingProduct: false,
-        },
-      }));
-      ShowToast.error(error.response?.data?.msg || "Erreur lors de la récupération des produits.");
-    } finally {
+      console.error("Fetch products error:", error.response?.data || error);
       set((state) => ({
         productState: { ...state.productState, loadingProduct: false },
       }));
+      ShowToast.error(error.response?.data?.msg || "Erreur lors de la récupération des produits.");
     }
   },
   nextPage: async () => {
@@ -81,7 +89,6 @@ export const useProduct = create((set, get) => ({
         box: productInfo.box,
       });
       if (response.status === 201) {
-        const data = response.data;
         await get().fetchAllProducts(get().productState.pagination.currentPage, get().productState.pagination.pageSize);
         ShowToast.dismiss(toastId);
         ShowToast.successAdd(`Le produit`);
@@ -133,7 +140,6 @@ export const useProduct = create((set, get) => ({
         box: productInfo.box,
       });
       if (response.status === 200) {
-        const data = response.data;
         await get().fetchAllProducts(get().productState.pagination.currentPage, get().productState.pagination.pageSize);
         ShowToast.dismiss(toastId);
         ShowToast.successUpdate(`Le produit`);

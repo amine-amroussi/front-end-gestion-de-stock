@@ -1,11 +1,10 @@
 import { create } from "zustand";
 import { axiosInstance } from "@/utils/axiosInstance";
-import { ShowToast } from "@/utils/toast"; // Use ShowToast instead of sonner toast
+import { ShowToast } from "@/utils/toast";
 
 export const useWastes = create((set, get) => ({
   wasteState: {
     wastes: [],
-    selectedWastes: [],
     selectedWaste: "",
     loadingWaste: false,
     error: null,
@@ -16,16 +15,19 @@ export const useWastes = create((set, get) => ({
       pageSize: 10,
     },
   },
-  fetchAllWastes: async (page = 1, limit = 10) => {
+  fetchAllWastes: async (page = 1, limit = 10, filters = {}) => {
     const toastId = ShowToast.loading("Chargement des déchets...");
     try {
       set((state) => ({
         wasteState: { ...state.wasteState, loadingWaste: true, error: null },
       }));
 
-      const response = await axiosInstance.get(`/waste`, {
-        params: { page, limit },
-      });
+      const params = { page, limit };
+      if (filters.type) params.type = filters.type;
+      if (filters.startDate) params.startDate = filters.startDate;
+      if (filters.endDate) params.endDate = filters.endDate;
+
+      const response = await axiosInstance.get(`/waste`, { params });
 
       if (response.status === 200) {
         const data = response.data;
@@ -93,45 +95,44 @@ export const useWastes = create((set, get) => ({
     }
   },
   createWaste: async (wasteInfo) => {
-  const toastId = ShowToast.loading("Ajout du déchet...");
-  try {
-    set((state) => ({
-      wasteState: { ...state.wasteState, loadingWaste: true, error: null },
-    }));
-    // Validate qtt is a number
-    const validatedWasteInfo = {
-      ...wasteInfo,
-      qtt: parseFloat(wasteInfo.qtt),
-    };
-    if (isNaN(validatedWasteInfo.qtt) || validatedWasteInfo.qtt <= 0) {
-      throw new Error("La quantité doit être un nombre positif");
-    }
-    const response = await axiosInstance.post("/waste", validatedWasteInfo);
-    if (response.status === 201 || response.status === 200) {
-      await get().fetchAllWastes(get().wasteState.pagination.currentPage, get().wasteState.pagination.pageSize);
+    const toastId = ShowToast.loading("Ajout du déchet...");
+    try {
+      set((state) => ({
+        wasteState: { ...state.wasteState, loadingWaste: true, error: null },
+      }));
+      const validatedWasteInfo = {
+        ...wasteInfo,
+        qtt: parseFloat(wasteInfo.qtt),
+      };
+      if (isNaN(validatedWasteInfo.qtt) || validatedWasteInfo.qtt <= 0) {
+        throw new Error("La quantité doit être un nombre positif");
+      }
+      const response = await axiosInstance.post("/waste", validatedWasteInfo);
+      if (response.status === 201 || response.status === 200) {
+        await get().fetchAllWastes(get().wasteState.pagination.currentPage, get().wasteState.pagination.pageSize);
+        set((state) => ({
+          wasteState: {
+            ...state.wasteState,
+            loadingWaste: false,
+          },
+        }));
+        ShowToast.dismiss(toastId);
+        ShowToast.successAdd("Déchet");
+      }
+    } catch (error) {
+      const errorMessage = error.response?.data?.message || error.message || "Échec de la création du déchet";
       set((state) => ({
         wasteState: {
           ...state.wasteState,
           loadingWaste: false,
+          error: errorMessage,
         },
       }));
       ShowToast.dismiss(toastId);
-      ShowToast.successAdd("Déchet");
+      ShowToast.error(errorMessage);
+      console.error("Create waste error:", error);
     }
-  } catch (error) {
-    const errorMessage = error.response?.data?.message || error.message || "Échec de la création du déchet";
-    set((state) => ({
-      wasteState: {
-        ...state.wasteState,
-        loadingWaste: false,
-        error: errorMessage,
-      },
-    }));
-    ShowToast.dismiss(toastId);
-    ShowToast.error(errorMessage);
-    console.error("Create waste error:", error);
-  }
-},
+  },
   getWaste: async (id) => {
     const toastId = ShowToast.loading("Chargement du déchet...");
     try {

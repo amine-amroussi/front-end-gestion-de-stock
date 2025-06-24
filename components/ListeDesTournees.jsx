@@ -14,6 +14,7 @@ import {
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { axiosInstance } from "@/utils/axiosInstance";
+import PrintAfternoonInvoice from "./PrintAfternoonInvoice";
 
 const ListeDesTournees = () => {
   const {
@@ -28,15 +29,14 @@ const ListeDesTournees = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [invoiceData, setInvoiceData] = useState(null);
   const [lastTripDetails, setLastTripDetails] = useState(null);
-  const [previousTripDetails, setPreviousTripDetails] = useState(null);
   const [trucks, setTrucks] = useState([]);
   const [selectedMatricule, setSelectedMatricule] = useState("");
   const [filters, setFilters] = useState({
     startDate: "",
     endDate: "",
-    employee: "",
+    employee: "", // Now used as seller CIN
     truck: "",
-    status: "",
+    status: "completed",
     search: "",
     sortBy: "date",
     sortOrder: "DESC",
@@ -53,6 +53,7 @@ const ListeDesTournees = () => {
           limit: filters.pageSize,
           sortBy: filters.sortBy,
           sortOrder: filters.sortOrder,
+          status: "completed",
         });
       } catch (error) {
         console.error("Error fetching initial data:", error);
@@ -60,7 +61,7 @@ const ListeDesTournees = () => {
       }
     };
     fetchInitialData();
-  }, [fetchAllTrips, filters.pageSize, filters.sortBy, filters.sortOrder]);
+  }, [fetchAllTrips]);
 
   const fetchTripsWithFilters = async (page = 1) => {
     try {
@@ -69,9 +70,9 @@ const ListeDesTournees = () => {
         limit: filters.pageSize,
         startDate: filters.startDate || undefined,
         endDate: filters.endDate || undefined,
-        employee: filters.employee || undefined,
+        employee: filters.employee || undefined, // Seller CIN
         truck: filters.truck || undefined,
-        status: filters.status === "all" ? undefined : filters.status,
+        status: "completed",
         search: filters.search || undefined,
         sortBy: filters.sortBy,
         sortOrder: filters.sortOrder,
@@ -97,14 +98,20 @@ const ListeDesTournees = () => {
       endDate: "",
       employee: "",
       truck: "",
-      status: "",
+      status: "completed",
       search: "",
       sortBy: "date",
       sortOrder: "DESC",
       pageSize: 10,
     };
     setFilters(defaultFilters);
-    fetchAllTrips(1, { page: 1, limit: 10, sortBy: "date", sortOrder: "DESC" });
+    fetchAllTrips(1, { 
+      page: 1, 
+      limit: 10, 
+      sortBy: "date", 
+      sortOrder: "DESC",
+      status: "completed",
+    });
   };
 
   const handlePageChange = (page) => {
@@ -156,72 +163,51 @@ const ListeDesTournees = () => {
   const handleTripClick = async (tripId) => {
     try {
       const parsedTripId = parseInt(tripId, 10);
-      if (isNaN(parsedTripId)) {
-        throw new Error("ID de tournée invalide.");
-      }
-      // Reset previous data to ensure fresh fetch
-      setPreviousTripDetails(null);
-      setLastTripDetails(null);
-      setInvoiceData(null);
-
+      if (isNaN(parsedTripId)) throw new Error("ID de tournée invalide");
       const trip = await fetchTripById(parsedTripId);
       setSelectedTrip(trip);
       setIsModalOpen(true);
 
       if (trip.TruckAssociation?.matricule) {
-        try {
-          const lastTripResponse = await axiosInstance.get(`/trip/last/${trip.TruckAssociation.matricule}`);
-          console.log("Last trip response:", lastTripResponse.data);
-          setLastTripDetails(lastTripResponse.data || null);
-
-          const previousTripResponse = await axiosInstance.get(`/trip/previous/${parsedTripId}`);
-          console.log("Previous trip response:", previousTripResponse.data);
-          setPreviousTripDetails(previousTripResponse.data.previousTrip || null);
-        } catch (fetchError) {
-          console.error("Error fetching trip details:", fetchError);
-          setLastTripDetails(null);
-          setPreviousTripDetails(null);
-          toast.error("Erreur lors de la récupération des détails des tournées précédentes.");
-        }
+        const response = await axiosInstance.get(`/trip/last/${trip.TruckAssociation.matricule}`);
+        setLastTripDetails(response.data);
       } else {
         setLastTripDetails(null);
-        setPreviousTripDetails(null);
-        console.log("No truck matricule, skipping last/previous trip fetch.");
       }
 
       if (!trip.isActive) {
         setInvoiceData({
           tripId: trip.id,
-          truck: trip.TruckAssociation?.matricule || "N/A",
-          driver: trip.DriverAssociation?.name || "N/A",
-          seller: trip.SellerAssociation?.name || "N/A",
+          truck: trip.TruckAssociation?.matricule,
+          driver: trip.DriverAssociation?.name,
+          seller: trip.SellerAssociation?.name,
           date: trip.date,
           zone: trip.zone,
           products: trip.TripProducts?.map((p) => ({
-            designation: p.ProductAssociation?.designation || "Inconnu",
-            qttOut: p.qttOut || 0,
-            qttOutUnite: p.qttOutUnite || 0,
-            qttReutour: p.qttReutour || 0,
-            qttReutourUnite: p.qttReutourUnite || 0,
-            qttVendu: p.qttVendu || 0,
-            priceUnite: p.ProductAssociation?.priceUnite || 0,
-            totalRevenue: (p.qttVendu || 0) * (p.ProductAssociation?.priceUnite || 0),
+            designation: p.ProductAssociation?.designation,
+            qttOut: p.qttOut,
+            qttOutUnite: p.qttOutUnite,
+            qttReutour: p.qttReutour,
+            qttReutourUnite: p.qttReutourUnite,
+            qttVendu: p.qttVendu,
+            priceUnite: p.ProductAssociation?.priceUnite,
+            totalRevenue: p.qttVendu * (p.ProductAssociation?.priceUnite || 0),
           })) || [],
           boxes: trip.TripBoxes?.map((b) => ({
             designation: b.BoxAssociation?.designation || "Inconnu",
-            qttOut: b.qttOut || 0,
-            qttIn: b.qttIn || 0,
+            qttOut: b.qttOut,
+            qttIn: b.qttIn,
           })) || [],
           wastes: trip.TripWastes?.map((w) => ({
             product: w.WasteAssociation?.ProductAssociation?.designation || w.product || "Inconnu",
-            type: w.type || "N/A",
-            qtt: w.qtt || 0,
+            type: w.type,
+            qtt: w.qtt,
             priceUnite: w.WasteAssociation?.ProductAssociation?.priceUnite || 0,
-            cost: (w.qtt || 0) * (w.WasteAssociation?.ProductAssociation?.priceUnite || 0),
+            cost: w.qtt * (w.WasteAssociation?.ProductAssociation?.priceUnite || 0),
           })) || [],
           charges: trip.TripCharges?.map((c) => ({
             type: c.ChargeAssociation?.type || "N/A",
-            amount: c.amount || 0,
+            amount: c.amount,
           })) || [],
           totals: {
             waitedAmount: trip.waitedAmount || 0,
@@ -230,7 +216,7 @@ const ListeDesTournees = () => {
             deff: trip.deff || 0,
             tripCharges: trip.TripCharges?.reduce((sum, c) => sum + (c.amount || 0), 0) || 0,
             totalWasteCost: trip.TripWastes?.reduce(
-              (sum, w) => sum + (w.qtt || 0) * (w.WasteAssociation?.ProductAssociation?.priceUnite || 0),
+              (sum, w) => sum + w.qtt * (w.WasteAssociation?.ProductAssociation?.priceUnite || 0),
               0
             ) || 0,
           },
@@ -239,8 +225,6 @@ const ListeDesTournees = () => {
     } catch (error) {
       console.error("Error fetching trip:", error);
       toast.error("Erreur lors de la récupération des détails de la tournée.");
-      setSelectedTrip(null);
-      setIsModalOpen(false);
     }
   };
 
@@ -250,15 +234,15 @@ const ListeDesTournees = () => {
         throw new Error("Aucune tournée ou données du dernier trajet disponibles.");
       }
       const formData = {
-        tripProducts: lastTripDetails.tripProducts?.map((product) => ({
+        tripProducts: lastTripDetails.tripProducts.map((product) => ({
           product_id: product.product,
           qttReutour: product.qttOut || 0,
           qttReutourUnite: product.qttOutUnite || 0,
-        })) || [],
-        tripBoxes: lastTripDetails.tripBoxes?.map((box) => ({
+        })),
+        tripBoxes: lastTripDetails.tripBoxes.map((box) => ({
           box_id: box.box,
           qttIn: box.qttOut || 0,
-        })) || [],
+        })),
         tripWastes: [],
         tripCharges: [],
         receivedAmount: 0,
@@ -266,7 +250,6 @@ const ListeDesTournees = () => {
       await finishTrip(selectedTrip.id, formData);
       setSelectedTrip(null);
       setLastTripDetails(null);
-      setPreviousTripDetails(null);
       setIsModalOpen(false);
       setInvoiceData(null);
       await fetchTripsWithFilters(pagination.currentPage);
@@ -285,7 +268,6 @@ const ListeDesTournees = () => {
       }
       await emptyTruck(selectedMatricule);
       setSelectedMatricule("");
-      setPreviousTripDetails(null);
       await fetchTripsWithFilters(pagination.currentPage);
       toast.success("Camion vidé avec succès !");
     } catch (error) {
@@ -299,103 +281,16 @@ const ListeDesTournees = () => {
     setSelectedTrip(null);
     setInvoiceData(null);
     setLastTripDetails(null);
-    setPreviousTripDetails(null);
-  };
-
-  const combineProducts = (selectedProducts = [], previousProducts = []) => {
-    const productMap = new Map();
-
-    // Process selected trip products
-    selectedProducts.forEach((p) => {
-      const designation = p.ProductAssociation?.designation || "Inconnu";
-      productMap.set(designation, {
-        type: "Product",
-        designation,
-        newQttOut: (productMap.get(designation)?.newQttOut || 0) + (p.qttOut || 0),
-        newQttOutUnite: (productMap.get(designation)?.newQttOutUnite || 0) + (p.qttOutUnite || 0),
-        qttReutour: p.qttReutour || 0,
-        qttReutourUnite: p.qttReutourUnite || 0,
-        qttVendu: p.qttVendu || 0,
-        priceUnite: p.ProductAssociation?.priceUnite || 0,
-        qttRestanteCaisses: 0,
-        qttRestanteUnites: 0,
-      });
-    });
-
-    // Process previous trip products
-    previousProducts.forEach((p) => {
-      const designation = p.ProductAssociation?.designation || "Inconnu";
-      const existing = productMap.get(designation) || {};
-      productMap.set(designation, {
-        type: "Product",
-        designation,
-        newQttOut: existing.newQttOut || 0,
-        newQttOutUnite: existing.newQttOutUnite || 0,
-        qttReutour: p.qttReutour || 0,
-        qttReutourUnite: p.qttReutourUnite || 0,
-        qttVendu: p.qttVendu || 0,
-        priceUnite: p.ProductAssociation?.priceUnite || existing.priceUnite || 0,
-        qttRestanteCaisses: p.qttReutour || 0,
-        qttRestanteUnites: p.qttReutourUnite || 0,
-      });
-    });
-
-    return Array.from(productMap.values()).map((item) => ({
-      ...item,
-      totalRevenue: (item.qttVendu || 0) * (item.priceUnite || 0),
-      sortieTotalCaisses: (item.newQttOut || 0) + (item.qttRestanteCaisses || 0),
-    }));
-  };
-
-  const combineBoxes = (selectedBoxes = [], previousBoxes = []) => {
-    const boxMap = new Map();
-
-    // Process previous trip boxes to calculate remaining
-    const previousRemaining = new Map();
-    previousBoxes.forEach((b) => {
-      const designation = b.BoxAssociation?.designation || "Inconnu";
-      const current = previousRemaining.get(designation) || { qttOut: 0, qttIn: 0 };
-      previousRemaining.set(designation, {
-        qttOut: current.qttOut + (b.qttOut || 0),
-        qttIn: current.qttIn + (b.qttIn || 0),
-      });
-    });
-
-    // Process selected trip boxes
-    selectedBoxes.forEach((b) => {
-      const designation = b.BoxAssociation?.designation || "Inconnu";
-      const prev = previousRemaining.get(designation) || { qttOut: 0, qttIn: 0 };
-      boxMap.set(designation, {
-        designation,
-        qttOut: b.qttOut || 0,
-        qttIn: b.qttIn || 0,
-        previousRemaining: (prev.qttOut || 0) - (prev.qttIn || 0),
-        newQttOut: (boxMap.get(designation)?.newQttOut || 0) + (b.qttOut || 0),
-      });
-    });
-
-    // Include previous trip boxes not in selected trip
-    previousRemaining.forEach((prev, designation) => {
-      if (!boxMap.has(designation)) {
-        boxMap.set(designation, {
-          designation,
-          qttOut: 0,
-          qttIn: 0,
-          previousRemaining: (prev.qttOut || 0) - (prev.qttIn || 0),
-        });
-      }
-    });
-
-    return Array.from(boxMap.values());
   };
 
   if (loadingTrip) return <p className="text-center text-gray-600">Chargement...</p>;
   if (error) return <p className="text-center text-red-600">{error}</p>;
 
   return (
-    <div className="bg-gray-50 min-h-screen p-6">
+    <div className="bg-gray-50 min-h-screen">
       <h2 className="text-3xl font-bold text-gray-800 mb-6">Liste des Tournées</h2>
 
+      {/* Empty Truck Section */}
       <div className="mb-6 bg-white p-6 rounded-lg shadow">
         <h3 className="text-lg font-semibold text-gray-800 mb-4">Vider un Camion</h3>
         <div className="flex gap-4 items-end">
@@ -424,6 +319,7 @@ const ListeDesTournees = () => {
         </div>
       </div>
 
+      {/* Filters */}
       <div className="mb-6 bg-white p-6 rounded-lg shadow">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
@@ -450,41 +346,26 @@ const ListeDesTournees = () => {
               id="employee"
               type="text"
               value={filters.employee}
-              placeholder="CIN du vendeur"
               onChange={(e) => handleFilterChange("employee", e.target.value)}
+              placeholder="CIN du vendeur"
             />
           </div>
           <div>
             <Label htmlFor="truck" className="text-sm font-medium">Camion</Label>
             <Input
               id="truck"
-              type="text"
               value={filters.truck}
-              placeholder="Matricule"
               onChange={(e) => handleFilterChange("truck", e.target.value)}
+              placeholder="Matricule"
             />
-          </div>
-          <div>
-            <Label htmlFor="status" className="text-sm font-medium">Statut</Label>
-            <Select value={filters.status} onValueChange={(value) => handleFilterChange("status", value)}>
-              <SelectTrigger id="status">
-                <SelectValue placeholder="Tous" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tous</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="completed">Terminée</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
           <div>
             <Label htmlFor="search" className="text-sm font-medium">Recherche (Zone/ID)</Label>
             <Input
               id="search"
-              type="text"
               value={filters.search}
-              placeholder="Zone ou ID"
               onChange={(e) => handleFilterChange("search", e.target.value)}
+              placeholder="Zone ou ID"
             />
           </div>
           <div>
@@ -525,6 +406,7 @@ const ListeDesTournees = () => {
         </div>
       </div>
 
+      {/* Trip List */}
       {trips.length === 0 ? (
         <p className="text-center text-gray-500">Aucune tournée disponible.</p>
       ) : (
@@ -545,10 +427,10 @@ const ListeDesTournees = () => {
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Date: {format(new Date(trip.date), "dd/MM/yyyy")}</p>
-                    <p className="text-sm text-gray-600">Zone: {trip.zone || "N/A"}</p>
+                    <p className="text-sm text-gray-600">Zone: {trip.zone}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">Statut: {trip.isActive ? "Active" : "Terminée"}</p>
+                    <p className="text-sm text-gray-600">Statut: Terminée</p>
                     <p className="text-sm text-gray-600">Différence: {trip.deff || 0} MAD</p>
                   </div>
                 </div>
@@ -556,6 +438,7 @@ const ListeDesTournees = () => {
             ))}
           </ul>
 
+          {/* Pagination */}
           <div className="mt-6 flex flex-col sm:flex-row justify-between items-center gap-4">
             <div className="flex gap-2">
               <Button
@@ -609,6 +492,7 @@ const ListeDesTournees = () => {
         </>
       )}
 
+      {/* Trip Details Modal */}
       {isModalOpen && selectedTrip && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -637,7 +521,7 @@ const ListeDesTournees = () => {
               </div>
               <div>
                 <p className="font-medium">Zone:</p>
-                <p>{selectedTrip.zone || "N/A"}</p>
+                <p>{selectedTrip.zone}</p>
               </div>
               <div>
                 <p className="font-medium">Date:</p>
@@ -645,7 +529,7 @@ const ListeDesTournees = () => {
               </div>
               <div>
                 <p className="font-medium">Statut:</p>
-                <p>{selectedTrip.isActive ? "Active" : "Terminée"}</p>
+                <p>Terminée</p>
               </div>
               <div>
                 <p className="font-medium">Différence:</p>
@@ -653,88 +537,121 @@ const ListeDesTournees = () => {
               </div>
             </div>
 
-            <div className="mt-6">
-              <h4 className="text-lg font-semibold mb-2">Produits</h4>
-              {combineProducts(selectedTrip.TripProducts, previousTripDetails?.TripProducts).length > 0 ? (
+            {selectedTrip.TripProducts?.length > 0 && (
+              <div className="mt-6">
+                <h4 className="text-lg font-semibold mb-2">Produits</h4>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm border-collapse">
                     <thead className="bg-gray-100">
                       <tr>
                         <th className="p-2 text-left">Désignation</th>
-                        <th className="p-2 text-right">Quantité Restante (Caisses)</th>
-                        <th className="p-2 text-right">Quantité Restante (Unités)</th>
-                        <th className="p-2 text-right">Sortie (Caisses)</th>
-                        <th className="p-2 text-right">Sortie (Unités)</th>
-                        <th className="p-2 text-right">Sortie Total (Caisses)</th>
-                        <th className="p-2 text-right">Sortie Total (Unites)</th>
-                        <th className="p-2 text-right">Retour (Caisses)</th>
-                        <th className="p-2 text-right">Retour (Unités)</th>
-                        <th className="p-2 text-right">Vendu</th>
-                        <th className="p-2 text-right">Prix (MAD)</th>
-                        <th className="p-2 text-right">Total (MAD)</th>
-                        
+                        <th className="p-2 text-left">Sortie (Caisses)</th>
+                        <th className="p-2 text-left">Sortie (Unités)</th>
+                        <th className="p-2 text-left">Retour (Caisses)</th>
+                        <th className="p-2 text-left">Retour (Unités)</th>
+                        <th className="p-2 text-left">Vendu</th>
+                        <th className="p-2 text-left">Prix (MAD)</th>
+                        <th className="p-2 text-left">Total (MAD)</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {combineProducts(selectedTrip.TripProducts, previousTripDetails?.TripProducts).map(
-                        (item, index) => (
-                          <tr key={`product-${index}`} className="border-b">
-                            <td className="p-2">{item.designation}</td>
-                            <td className="p-2 text-right">{item.qttRestanteCaisses}</td>
-                            <td className="p-2 text-right">{item.qttRestanteUnites}</td>
-                            <td className="p-2 text-right">{item.newQttOut}</td>
-                            <td className="p-2 text-right">{item.newQttOutUnite}</td>
-                            <td className="p-2 text-right">{item.qttRestanteCaisses + item.newQttOut}</td>
-                            <td className="p-2 text-right">{item.qttRestanteUnites + item.newQttOutUnite}</td>
-                            <td className="p-2 text-right">{item.qttReutour}</td>
-                            <td className="p-2 text-right">{item.qttReutourUnite}</td>
-                            {/* <td className="p-2 text-right">{item.qttRestanteCaisses}</td> */}
-                            <td className="p-2 text-right">{item.qttVendu}</td>
-                            <td className="p-2 text-right">{item.priceUnite}</td>
-                            <td className="p-2 text-right">{item.totalRevenue}</td>
-                            
-                          </tr>
-                        )
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <p className="text-sm text-gray-600">Aucun produit trouvé pour cette tournée ou la précédente.</p>
-              )}
-            </div>
-
-            <div className="mt-6">
-              <h4 className="text-lg font-semibold mb-2">Caisses</h4>
-              {combineBoxes(selectedTrip.TripBoxes, previousTripDetails?.TripBoxes).length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm border-collapse">
-                    <thead className="bg-gray-100">
-                      <tr>
-                        <th className="p-2 text-left">Désignation</th>
-                        <th className="p-2 text-right">Restant Précédent (Caisses)</th>
-                        <th className="p-2 text-right">Sortie (Caisses)</th>
-                        <th className="p-2 text-right">Retour (Caisses)</th>
-                        <th className="p-2 text-right">Diff (Caisses)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {combineBoxes(selectedTrip.TripBoxes, previousTripDetails?.TripBoxes).map((item, index) => (
-                        <tr key={`box-${index}`} className="border-b">
-                          <td className="p-2">{item.designation}</td>
-                          <td className="p-2 text-right">{item.previousRemaining}</td>
-                          <td className="p-2 text-right">{item.qttOut}</td>
-                          <td className="p-2 text-right">{item.qttIn}</td>
-                          <td className="p-2 text-right">{item.qttOut - item.qttIn}</td>
+                      {selectedTrip.TripProducts.map((product, index) => (
+                        <tr key={index} className="border-b">
+                          <td className="p-2">{product.ProductAssociation?.designation || "Inconnu"}</td>
+                          <td className="p-2">{product.qttOut || 0}</td>
+                          <td className="p-2">{product.qttOutUnite || 0}</td>
+                          <td className="p-2">{product.qttReutour || 0}</td>
+                          <td className="p-2">{product.qttReutourUnite || 0}</td>
+                          <td className="p-2">{product.qttVendu || 0}</td>
+                          <td className="p-2">{product.ProductAssociation?.priceUnite || 0}</td>
+                          <td className="p-2">{(product.qttVendu || 0) * (product.ProductAssociation?.priceUnite || 0)}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-              ) : (
-                <p className="text-sm text-gray-600">Aucune caisse trouvée pour cette tournée.</p>
-              )}
-            </div>
+              </div>
+            )}
+
+            {selectedTrip.TripBoxes?.length > 0 && (
+              <div className="mt-6">
+                <h4 className="text-lg font-semibold mb-2">Boîtes</h4>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm border-collapse">
+                    <thead className="bg-gray-100">
+                      <tr>
+                        <th className="p-2 text-left">Désignation</th>
+                        <th className="p-2 text-left">Sortie</th>
+                        <th className="p-2 text-left">Retour</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedTrip.TripBoxes.map((box, index) => (
+                        <tr key={index} className="border-b">
+                          <td className="p-2">{box.BoxAssociation?.designation || "Inconnu"}</td>
+                          <td className="p-2">{box.qttOut || 0}</td>
+                          <td className="p-2">{box.qttIn || 0}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {selectedTrip.TripWastes?.length > 0 && (
+              <div className="mt-6">
+                <h4 className="text-lg font-semibold mb-2">Déchets</h4>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm border-collapse">
+                    <thead className="bg-gray-100">
+                      <tr>
+                        <th className="p-2 text-left">Produit</th>
+                        <th className="p-2 text-left">Type</th>
+                        <th className="p-2 text-left">Quantité</th>
+                        <th className="p-2 text-left">Prix Unitaire (MAD)</th>
+                        <th className="p-2 text-left">Coût Total (MAD)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedTrip.TripWastes.map((waste, index) => (
+                        <tr key={index} className="border-b">
+                          <td className="p-2">{waste.WasteAssociation?.ProductAssociation?.designation || waste.product || "Inconnu"}</td>
+                          <td className="p-2">{waste.type || "N/A"}</td>
+                          <td className="p-2">{waste.qtt || 0}</td>
+                          <td className="p-2">{waste.WasteAssociation?.ProductAssociation?.priceUnite || 0}</td>
+                          <td className="p-2">{(waste.qtt || 0) * (waste.WasteAssociation?.ProductAssociation?.priceUnite || 0)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {selectedTrip.TripCharges?.length > 0 && (
+              <div className="mt-6">
+                <h4 className="text-lg font-semibold mb-2">Charges</h4>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm border-collapse">
+                    <thead className="bg-gray-100">
+                      <tr>
+                        <th className="p-2 text-left">Type</th>
+                        <th className="p-2 text-left">Montant (MAD)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedTrip.TripCharges.map((charge, index) => (
+                        <tr key={index} className="border-b">
+                          <td className="p-2">{charge.ChargeAssociation?.type || "N/A"}</td>
+                          <td className="p-2">{charge.amount || 0}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             {!selectedTrip.isActive && invoiceData && (
               <div className="mt-6">
@@ -742,20 +659,39 @@ const ListeDesTournees = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <p className="font-medium">Montant Attendu:</p>
-                    <p>{invoiceData.totals?.waitedAmount || 0} MAD</p>
+                    <p>{invoiceData.totals?.waitedAmount - parseFloat(invoiceData.totals?.tripCharges) || 0} MAD</p>
                   </div>
                   <div>
                     <p className="font-medium">Montant Reçu:</p>
                     <p>{invoiceData.totals?.receivedAmount || 0} MAD</p>
+                  </div>
+                  <div>
+                    <p className="font-medium">Bénéfice:</p>
+                    <p>{invoiceData.totals?.benefit || 0} MAD</p>
+                  </div>
+                  <div>
+                    <p className="font-medium">Différence:</p>
+                    <p>{invoiceData.totals?.deff || 0} MAD</p>
+                  </div>
+                  <div>
+                    <p className="font-medium">Total Charges:</p>
+                    <p>{invoiceData.totals?.tripCharges || 0} MAD</p>
+                  </div>
+                  <div>
+                    <p className="font-medium">Coût Total Déchets:</p>
+                    <p>{invoiceData.totals?.totalWasteCost || 0} MAD</p>
                   </div>
                 </div>
               </div>
             )}
 
             <div className="mt-6 flex justify-end gap-2">
+              {!selectedTrip.isActive && invoiceData && (
+                <PrintAfternoonInvoice invoiceData={invoiceData} />
+              )}
               {lastTripDetails && (
                 <Button onClick={handleEmptyTruck} className="bg-red-600 hover:bg-red-700 text-white">
-                  Vider Camion
+                  Vider le Camion
                 </Button>
               )}
               <Button onClick={closeModal} variant="outline">Fermer</Button>

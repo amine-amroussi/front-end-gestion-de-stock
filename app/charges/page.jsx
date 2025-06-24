@@ -13,12 +13,12 @@ const ChargePage = () => {
       <AddChargeSheet open={open} setOpen={setOpen} />
       <h1 className="text-xl font-bold capitalize">Gestion des charges</h1>
       <div className="my-5 w-full flex items-center justify-between">
-        <Input
+        {/* <Input
           className={"w-64 bg-gray-100"}
           name="search"
           type="search"
           placeholder="Rechercher une charge"
-        />
+        /> */}
         <Button className="cursor-pointer" onClick={() => setOpen(true)}>
           Ajouter une charge
         </Button>

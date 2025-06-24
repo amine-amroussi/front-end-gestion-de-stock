@@ -177,6 +177,9 @@ const PrintInvoice = forwardRef(({ formData, tripDetails, products, boxes, emplo
           <div class="total">
             <p>Montant Total: ${totalAmount} MAD</p>
           </div>
+          <div class="total">
+            <p>Commaission: ${totalAmount} MAD</p>
+          </div>
           <div class="footer">
             <p>Merci pour votre confiance !</p>
             <p>© ${new Date().getFullYear()} Entreprise Exemple</p>

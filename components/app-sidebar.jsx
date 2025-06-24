@@ -11,6 +11,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { links, otherUrls } from "@/utils/constants";
+import Image from "next/image";
 import Link from "next/link";
 
 export function AppSidebar() {
@@ -18,6 +19,12 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarContent>
         <SidebarGroup>
+          <Image
+            src="/logo.png"
+            alt="Logo"
+            width={70}            
+            height={70}
+          />
           <SidebarGroupLabel>System de gestion</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>

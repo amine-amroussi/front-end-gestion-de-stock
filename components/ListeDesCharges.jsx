@@ -1,9 +1,11 @@
 "use client";
-import { ChevronRight, ChevronLeft } from "lucide-react";
-import { useEffect } from "react";
+import { ChevronRight, ChevronLeft, Printer } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useCharges } from "@/store/chargeStore";
 import { Button } from "@/components/ui/button";
-import { ShowToast } from "@/utils/toast";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import PrintChargeList from "@/components/PrintChargeList";
 
 const ListeDesCharges = () => {
   const {
@@ -12,20 +14,40 @@ const ListeDesCharges = () => {
     nextPage,
   } = useCharges();
 
-  useEffect(() => {
-    fetchAllCharges(pagination.currentPage, pagination.pageSize);
-  }, [fetchAllCharges, pagination.currentPage, pagination.pageSize]);
+  const [filters, setFilters] = useState({
+    type: "",
+    startDate: "",
+    endDate: "",
+  });
 
   useEffect(() => {
-    if (error) {
-      ShowToast.error(error);
-    }
-  }, [error]);
+    fetchAllCharges(pagination.currentPage, pagination.pageSize, filters);
+  }, [fetchAllCharges, pagination.currentPage, pagination.pageSize, filters]);
 
   const handlePageChange = (newPage) => {
     if (newPage >= 1 && newPage <= pagination.totalPages) {
-      fetchAllCharges(newPage, pagination.pageSize);
+      fetchAllCharges(newPage, pagination.pageSize, filters);
     }
+  };
+
+  const handlePrint = () => {
+    PrintChargeList(charges);
+  };
+
+  const handleFilterChange = (e) => {
+    const { name, value } = e.target;
+    setFilters((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const clearFilters = () => {
+    setFilters({
+      type: "",
+      startDate: "",
+      endDate: "",
+    });
   };
 
   const renderPageNumbers = () => {
@@ -59,9 +81,59 @@ const ListeDesCharges = () => {
 
   return (
     <div className="container mx-auto">
+      <div className="mb-6">
+        <div className="flex flex-col md:flex-row gap-4 mb-4">
+          <div className="flex-1">
+            <Label htmlFor="type">Type de charge</Label>
+            <Input
+              id="type"
+              name="type"
+              value={filters.type}
+              onChange={handleFilterChange}
+              placeholder="Filtrer par type"
+              className="mt-1"
+            />
+          </div>
+          <div className="flex-1">
+            <Label htmlFor="startDate">Date de début</Label>
+            <Input
+              id="startDate"
+              name="startDate"
+              type="date"
+              value={filters.startDate}
+              onChange={handleFilterChange}
+              className="mt-1"
+            />
+          </div>
+          <div className="flex-1">
+            <Label htmlFor="endDate">Date de fin</Label>
+            <Input
+              id="endDate"
+              name="endDate"
+              type="date"
+              value={filters.endDate}
+              onChange={handleFilterChange}
+              className="mt-1"
+            />
+          </div>
+        </div>
+        <div className="flex justify-between">
+          <Button variant="outline" onClick={clearFilters}>
+            Réinitialiser les filtres
+          </Button>
+          <Button variant="outline" onClick={handlePrint}>
+            <Printer className="h-4 w-4 mr-2" />
+            Imprimer la liste
+          </Button>
+        </div>
+      </div>
+
       {loadingCharge && <p className="text-center">Chargement des charges...</p>}
       {!loadingCharge && !error && charges.length === 0 && (
         <p className="text-center">Aucune charge trouvée.</p>
+      )}
+      {error && (
+        <p className="text-center text-red-500">{error}</p>
       )}
 
       {!loadingCharge && !error && charges.length > 0 && (

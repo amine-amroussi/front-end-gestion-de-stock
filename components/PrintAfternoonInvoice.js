@@ -170,9 +170,10 @@ const PrintAfternoonInvoice = ({ invoiceData }) => {
             <p><strong>Montant Attendu:</strong> ${(invoiceData.totals?.waitedAmount || 0)} MAD</p>
             <p><strong>Montant Reçu:</strong> ${(invoiceData.totals?.receivedAmount || 0)} MAD</p>
             <p><strong>Différence:</strong> ${(invoiceData.totals?.deff || 0)} MAD</p>
-            <p><strong>Bénéfice:</strong> ${(invoiceData.totals?.benefit || 0)} MAD</p>
+            <p><strong>Commission:</strong> ${(totalAmount * 0.008).toFixed(2)} MAD</p>
+
           </div>
-          <div class="footer">
+          <div class="footer">  
             <p>Merci pour votre confiance !</p>
             <p>© ${new Date().getFullYear()} Entreprise Exemple</p>
           </div>

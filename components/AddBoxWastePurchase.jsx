@@ -342,7 +342,7 @@ const AddBoxWastePurchase = ({ open, setOpen, onPurchaseAdded }) => {
                   )}
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  <div>
+                  {/* <div>
                     <Label className="text-sm font-medium">Qté Entrée</Label>
                     <Input
                       type="number"
@@ -363,7 +363,7 @@ const AddBoxWastePurchase = ({ open, setOpen, onPurchaseAdded }) => {
                         {formErrors[`box_${index}_qttIn`]}
                       </p>
                     )}
-                  </div>
+                  </div> */}
                   <div>
                     <Label className="text-sm font-medium">Qté Sortie</Label>
                     <Input
